@@ -252,7 +252,7 @@ class RescalingIntQuant(torch.jit.ScriptModule):
 
 
 class IntQuant(torch.jit.ScriptModule):
-    __constants__ = ['signed', 'narrow_range', 'gamma_rescaling']
+    __constants__ = ['signed', 'narrow_range']
 
     def __init__(self,
                  narrow_range: bool,
