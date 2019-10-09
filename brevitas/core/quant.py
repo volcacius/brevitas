@@ -48,10 +48,16 @@ from torch.nn import Module
 from brevitas.utils.python_utils import AutoName
 from brevitas.function.ops import min_int, max_int, max_uint, tensor_clamp, tensor_clamp_ste
 from brevitas.function import binary_sign_ste, ternary_sign_ste
+from brevitas.core.function_wrapper import Identity
+
+from brevitas import config
 
 
 __all__ = ['QuantType', 'BinaryQuant', 'TernaryQuant', 'RescalingIntQuant', 'PrescaledIntQuant',
            'PrescaledRestrictIntQuant']
+
+
+GAMMA_RESCALING_EPSILON = 2e-16
 
 
 class QuantType(AutoName):
@@ -128,7 +134,8 @@ class PrescaledRestrictIntQuantWithInputBitWidth(torch.jit.ScriptModule):
         self.int_quant = IntQuant(signed=signed,
                                   narrow_range=narrow_range,
                                   tensor_clamp_impl=tensor_clamp_impl,
-                                  float_to_int_impl=float_to_int_impl)
+                                  float_to_int_impl=float_to_int_impl,
+                                  gamma_rescaling=False)
         self.msb_clamp_bit_width_impl = msb_clamp_bit_width_impl
 
     @torch.jit.script_method
@@ -154,7 +161,8 @@ class PrescaledRestrictIntQuant(torch.jit.ScriptModule):
         self.int_quant = IntQuant(signed=signed,
                                   narrow_range=narrow_range,
                                   tensor_clamp_impl=tensor_clamp_impl,
-                                  float_to_int_impl=float_to_int_impl)
+                                  float_to_int_impl=float_to_int_impl,
+                                  gamma_rescaling=False)
         self.msb_clamp_bit_width_impl = msb_clamp_bit_width_impl
 
     @torch.jit.script_method
@@ -185,7 +193,8 @@ class PrescaledIntQuant(torch.jit.ScriptModule):
         self.int_quant = IntQuant(signed=signed,
                                   narrow_range=narrow_range,
                                   tensor_clamp_impl=tensor_clamp_impl,
-                                  float_to_int_impl=float_to_int_impl)
+                                  float_to_int_impl=float_to_int_impl,
+                                  gamma_rescaling=False)
 
     @torch.jit.script_method
     def forward(self,
@@ -204,6 +213,7 @@ class RescalingIntQuant(torch.jit.ScriptModule):
                  narrow_range: bool,
                  runtime: bool,
                  signed: bool,
+                 gamma_rescaling: bool,
                  scaling_impl: Module,
                  int_scaling_impl: Module,
                  tensor_clamp_impl: Module,
@@ -213,7 +223,8 @@ class RescalingIntQuant(torch.jit.ScriptModule):
         self.int_quant = IntQuant(signed=signed,
                                   narrow_range=narrow_range,
                                   tensor_clamp_impl=tensor_clamp_impl,
-                                  float_to_int_impl=float_to_int_impl)
+                                  float_to_int_impl=float_to_int_impl,
+                                  gamma_rescaling=gamma_rescaling)
         self.runtime = runtime
         self.scaling_impl = scaling_impl
         self.int_scaling_impl = int_scaling_impl
@@ -241,11 +252,12 @@ class RescalingIntQuant(torch.jit.ScriptModule):
 
 
 class IntQuant(torch.jit.ScriptModule):
-    __constants__ = ['signed', 'narrow_range']
+    __constants__ = ['signed', 'narrow_range', 'gamma_rescaling']
 
     def __init__(self,
                  narrow_range: bool,
                  signed: bool,
+                 gamma_rescaling: bool,
                  float_to_int_impl: Module,
                  tensor_clamp_impl: Module):
         super(IntQuant, self).__init__()
@@ -253,6 +265,10 @@ class IntQuant(torch.jit.ScriptModule):
         self.tensor_clamp_impl = tensor_clamp_impl
         self.signed = signed
         self.narrow_range = narrow_range
+        if gamma_rescaling:
+            self.gamma_rescaling_impl = GammaRescaling()
+        else:
+            self.gamma_rescaling_impl = Identity()
 
     def to_int(self,
                scale: Tensor,
@@ -287,5 +303,28 @@ class IntQuant(torch.jit.ScriptModule):
                 x: Tensor) -> Tensor:
         y_int = self.to_int(scale, int_scale, msb_clamp_bit_width, x)
         y = y_int / int_scale
+        y = self.gamma_rescaling_impl(y)
         y = y * scale
         return y
+
+
+class GammaRescaling(torch.jit.ScriptModule):
+    __constants__ = ['epsilon']
+
+    def __init__(self):
+        super(GammaRescaling, self).__init__()
+        self.gamma = torch.nn.Parameter(torch.tensor(1.0))
+        self.epsilon = GAMMA_RESCALING_EPSILON
+
+    @torch.jit.script_method
+    def forward(self, x: Tensor) -> Tensor:
+        y = torch.pow(x.abs(), self.gamma.abs() + self.epsilon) * x.sign()
+        return y
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        super(GammaRescaling, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs)
+        gamma_key = prefix + 'gamma'
+        if config.IGNORE_MISSING_KEYS and gamma_key in missing_keys:
+            missing_keys.remove(gamma_key)

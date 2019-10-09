@@ -102,6 +102,7 @@ class QuantReLU(QuantActivation):
                  scaling_stats_buffer_momentum = 0.1,
                  scaling_stats_permute_dims = (1, 0, 2, 3),
                  per_channel_broadcastable_shape: Optional[Tuple[int, ...]] = None,
+                 gamma_rescaling: bool = False,
                  min_overall_bit_width: Optional[int] = 2,
                  max_overall_bit_width: Optional[int] = None,
                  bit_width_impl_override: Union[BitWidthParameter] = None,
@@ -136,7 +137,8 @@ class QuantReLU(QuantActivation):
                                                     scaling_stats_permute_dims=scaling_stats_permute_dims,
                                                     scaling_stats_input_view_shape_impl=scaling_stats_input_view_shape_impl,
                                                     scaling_stats_op=scaling_stats_op,
-                                                    scaling_stats_buffer_momentum=scaling_stats_buffer_momentum)
+                                                    scaling_stats_buffer_momentum=scaling_stats_buffer_momentum,
+                                                    gamma_rescaling=gamma_rescaling)
 
 
 class QuantSigmoid(QuantActivation):
@@ -181,7 +183,8 @@ class QuantSigmoid(QuantActivation):
                                                     scaling_stats_input_view_shape_impl=None,
                                                     scaling_stats_op=None,
                                                     scaling_stats_buffer_momentum=None,
-                                                    scaling_stats_permute_dims=None)
+                                                    scaling_stats_permute_dims=None,
+                                                    gamma_rescaling=False)
 
 
 class QuantTanh(QuantActivation):
@@ -226,7 +229,8 @@ class QuantTanh(QuantActivation):
                                                     scaling_stats_input_view_shape_impl=None,
                                                     scaling_stats_op=None,
                                                     scaling_stats_buffer_momentum=None,
-                                                    scaling_stats_permute_dims=None)
+                                                    scaling_stats_permute_dims=None,
+                                                    gamma_rescaling=False)
 
 
 class QuantHardTanh(QuantActivation):
@@ -247,6 +251,7 @@ class QuantHardTanh(QuantActivation):
                  scaling_stats_buffer_momentum: float = 0.1,
                  scaling_stats_permute_dims: Tuple = (1, 0, 2, 3),
                  per_channel_broadcastable_shape: Optional[Tuple[int, ...]] = None,
+                 gamma_rescaling: bool = False,
                  min_overall_bit_width: Optional[int] = 2,
                  max_overall_bit_width: Optional[int] = None,
                  bit_width_impl_override: Union[BitWidthParameter] = None,
@@ -285,4 +290,5 @@ class QuantHardTanh(QuantActivation):
                                                     scaling_stats_input_view_shape_impl=scaling_stats_input_view_shape_impl,
                                                     scaling_stats_op=scaling_stats_op,
                                                     scaling_stats_buffer_momentum=scaling_stats_buffer_momentum,
-                                                    scaling_stats_permute_dims=scaling_stats_permute_dims)
+                                                    scaling_stats_permute_dims=scaling_stats_permute_dims,
+                                                    gamma_rescaling=gamma_rescaling)

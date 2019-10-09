@@ -218,7 +218,8 @@ def _weight_quant_init_impl(bit_width: Optional[int],
                                              tensor_clamp_impl=tensor_clamp_impl,
                                              msb_clamp_bit_width_impl=bit_width_impl,
                                              float_to_int_impl=float_to_int_impl,
-                                             runtime=False)
+                                             runtime=False,
+                                             gamma_rescaling=False)
         else:
             raise Exception('Unsupported weight quantization: {} bit width, {} quantization.'
                             .format(bit_width, str(quant_type)))

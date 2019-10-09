@@ -93,6 +93,7 @@ class ActivationQuantProxy(Module):
                  scaling_stats_input_view_shape_impl: Optional[StatsInputViewShapeImpl],
                  scaling_stats_permute_dims: Optional[Tuple],
                  per_channel_broadcastable_shape: Optional[Tuple[int, ...]],
+                 gamma_rescaling: bool,
                  min_overall_bit_width: Optional[int],
                  max_overall_bit_width: Optional[int],
                  bit_width_impl_override: Module,
@@ -200,7 +201,8 @@ class ActivationQuantProxy(Module):
                                                  tensor_clamp_impl=tensor_clamp_impl,
                                                  msb_clamp_bit_width_impl=msb_clamp_bit_width_impl,
                                                  float_to_int_impl=float_to_int_impl,
-                                                 runtime=runtime)
+                                                 runtime=runtime,
+                                                 gamma_rescaling=gamma_rescaling)
             else:
                 raise Exception("Quantization type {} not supported for activations.".format(quant_type))
 
