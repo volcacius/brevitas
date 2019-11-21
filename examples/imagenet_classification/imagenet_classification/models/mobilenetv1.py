@@ -31,12 +31,8 @@ __all__ = ['quant_mobilenet_v1']
 from torch import nn
 from torch.nn import Sequential
 
-from brevitas.quant_tensor import pack_quant_tensor
-
 from .common import make_quant_conv2d, make_quant_linear, make_quant_relu, make_quant_avg_pool
-
-
-FIRST_LAYER_BIT_WIDTH = 8
+from .common import multisample_dropout_classify
 
 
 class DwsConvBlock(nn.Module):
@@ -109,18 +105,22 @@ class MobileNet(nn.Module):
     def __init__(self,
                  channels,
                  first_stage_stride,
+                 first_layer_bit_width,
                  bit_width,
+                 dropout_rate,
+                 dropout_samples,
                  in_channels=3,
                  num_classes=1000):
         super(MobileNet, self).__init__()
         init_block_channels = channels[0][0]
-
+        self.dropout_rate = dropout_rate
+        self.dropout_samples = dropout_samples
         self.features = Sequential()
         init_block = ConvBlock(in_channels=in_channels,
                                out_channels=init_block_channels,
                                kernel_size=3,
                                stride=2,
-                               weight_bit_width=FIRST_LAYER_BIT_WIDTH,
+                               weight_bit_width=first_layer_bit_width,
                                activation_scaling_per_channel=True,
                                act_bit_width=bit_width)
         self.features.add_module('init_block', init_block)
@@ -150,23 +150,30 @@ class MobileNet(nn.Module):
 
     def forward(self, x):
         quant_tensor = self.features(x)
-        x, scale, bit_width = self.final_pool(quant_tensor)
-        x = x.view(x.size(0), -1)
-        out = self.output(pack_quant_tensor(x, scale, bit_width))
+        x = self.final_pool(quant_tensor)
+        out = multisample_dropout_classify(
+            x,
+            training=self.training,
+            classifier=self.output,
+            samples=self.dropout_samples,
+            rate=self.dropout_rate)
         return out
 
 
-def quant_mobilenet_v1(cfg):
+def quant_mobilenet_v1(hparams):
 
     channels = [[32], [64], [128, 128], [256, 256], [512, 512, 512, 512, 512, 512], [1024, 1024]]
     first_stage_stride = False
     width_scale = float(cfg.get('MODEL', 'WIDTH_SCALE'))
     bit_width = cfg.getint('QUANT', 'BIT_WIDTH')
 
-    if width_scale != 1.0:
-        channels = [[int(cij * width_scale) for cij in ci] for ci in channels]
+    if hparams.model.WIDTH_SCALE != 1.0:
+        channels = [[int(cij * hparams.model.WIDTH_SCALE) for cij in ci] for ci in channels]
 
     net = MobileNet(channels=channels,
                     first_stage_stride=first_stage_stride,
-                    bit_width=bit_width)
+                    first_layer_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
+                    bit_width=hparams.model.BIT_WIDTH,
+                    dropout_rate=hparams.dropout.RATE,
+                    dropout_samples=hparams.dropout.SAMPLES)
     return net

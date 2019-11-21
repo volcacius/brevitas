@@ -1,8 +1,11 @@
+from torch.nn import functional as F
+
 import brevitas.nn as qnn
 from brevitas.core.quant import QuantType
 from brevitas.core.restrict_val import RestrictValueType
 from brevitas.core.scaling import ScalingImplType
 from brevitas.core.stats import StatsOp
+from brevitas.quant_tensor import pack_quant_tensor
 
 QUANT_TYPE = QuantType.INT
 SCALING_MIN_VAL = 2e-16
@@ -151,3 +154,22 @@ def make_hadamard_classifier(in_channels,
     return qnn.HadamardClassifier(in_channels=in_channels,
                                   out_channels=out_channels,
                                   fixed_scale=fixed_scale)
+
+
+def multisample_dropout_classify(x, classifier, samples, rate, training):
+    x, scale, bit_width = x
+    x = x.view(x.size(0), -1)
+    if training and samples == 0:
+        out = F.dropout(x, p=rate)
+        out = classifier(pack_quant_tensor(out, scale, bit_width))
+        return out
+    if training and samples > 1:
+        out_list = []
+        for i in range(samples):
+            out = F.dropout(x, p=rate)
+            out = classifier(pack_quant_tensor(out, scale, bit_width))
+            out_list.append(out)
+        return tuple(out_list)
+    else:
+        out = classifier(pack_quant_tensor(x, scale, bit_width))
+        return out

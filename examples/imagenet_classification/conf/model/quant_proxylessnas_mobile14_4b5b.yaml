@@ -1,0 +1,18 @@
+model:
+  ARCH: quant_proxylessnas_mobile14
+  PRETRAINED_PTH: https://github.com/Xilinx/brevitas/releases/download/quant_proxylessnas_mobile14_4b5b-r0/quant_proxylessnas_mobile14_4b5b-2bdf7f8d.pth
+  FIRST_LAYER_WEIGHT_BIT_WIDTH: 8
+  DEPTHWISE_BIT_WIDTH: 5
+  BIT_WIDTH: 4
+  HADAMARD_CLASSIFIER: False
+
+# 128 / 255 = 0.5019607843137255
+preprocess:
+  MEAN:
+    - 0.5019607843137255
+    - 0.5019607843137255
+    - 0.5019607843137255
+  STD:
+    - 0.5019607843137255
+    - 0.5019607843137255
+    - 0.5019607843137255

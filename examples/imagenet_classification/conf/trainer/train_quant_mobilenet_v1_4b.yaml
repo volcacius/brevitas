@@ -1,0 +1,25 @@
+TRAIN_BATCH_SIZE: 256
+IS_DISTRIBUTED: False
+MIXED_PRECISION: False
+
+LABEL_SMOOTHING: 0.0
+
+OPTIMIZER: SGD
+optim_conf:
+  lr: 0.01
+  weight_decay: 0.0001
+  nesterov: False
+
+SCHEDULER: COSINE
+scheduler_conf:
+  T_max: 10
+
+
+dropout:
+  RATE: 0.2
+  SAMPLES: 16
+
+NO_WD:
+  - 'bn'
+  - 'bias'
+  - 'scaling'

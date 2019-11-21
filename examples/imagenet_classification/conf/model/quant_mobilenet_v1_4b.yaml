@@ -1,0 +1,16 @@
+model:
+  ARCH: quant_mobilenet_v1
+  WIDTH_SCALE: 1.0
+  PRETRAINED_PTH: https://github.com/Xilinx/brevitas/releases/download/quant_mobilenet_v1_4b-r1/quant_mobilenet_v1_4b-0100a667.pth
+  FIRST_LAYER_WEIGHT_BIT_WIDTH: 8
+  BIT_WIDTH: 4
+
+preprocess:
+  MEAN:
+    - 0.485
+    - 0.456
+    - 0.406
+  STD:
+    - 0.226
+    - 0.226
+    - 0.226

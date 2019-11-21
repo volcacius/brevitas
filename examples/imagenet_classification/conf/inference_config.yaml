@@ -1,0 +1,7 @@
+defaults:
+  - model: quant_mobilenet_v1_4b
+  - misc
+
+dropout:
+  RATE: 0.0
+  SAMPLES: 0.0
