@@ -49,12 +49,12 @@ class LogStage(AutoName):
 class HydraTestTubeLogger(TestTubeLogger):
 
     @rank_zero_only
-    def log_hyperparams(self, params):
+    def log_hyperparams(self, hparams):
         self.experiment.debug = self.debug
 
         # Get the hparams as a flattened dict
-        params_dict = Config.to_container(params, resolve=True)
-        pseudo_flatten_hparams = flatdict.FlatDict(params_dict, delimiter='_')
+        hparams_dict = Config.to_container(hparams, resolve=True)
+        pseudo_flatten_hparams = flatdict.FlatDict(hparams_dict, delimiter='_')
         flatten_hparams = {}
         for k in pseudo_flatten_hparams.keys():
             val = pseudo_flatten_hparams[k]
@@ -72,9 +72,10 @@ class HydraTestTubeLogger(TestTubeLogger):
             self.experiment.add_hparams(flatten_hparams, metric_dict={})
 
         # Log into trains
-        Task.current_task().connect(flatten_hparams)
-        model_config, _ = filter_keys(flatten_hparams, ['model', 'preprocess'], return_dict=True)
-        Task.current_task().set_model_config(model_config)
+        if hparams.TRAINS_LOGGING:
+            Task.current_task().connect(flatten_hparams)
+            model_config, _ = filter_keys(flatten_hparams, ['model', 'preprocess'], return_dict=True)
+            Task.current_task().set_model_config(model_config)
 
     @rank_zero_only
     def log_metrics(self, metrics, step_num=None):

@@ -6,6 +6,7 @@ defaults:
 log:
   INTERVAL: 2
   SAVE_INTERVAL: 10
+  TRAINS_LOGGING: True
 
 
 
