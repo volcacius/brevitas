@@ -14,7 +14,6 @@ from imagenet_classification.hydra_logger import HydraTestTubeLogger
 @hydra.main(config_path='conf/train_config.yaml')
 def main(hparams):
     logging.info(hparams.pretty())
-
     torch.backends.cudnn.benchmark = True
 
     model = QuantImageNetClassification(hparams)

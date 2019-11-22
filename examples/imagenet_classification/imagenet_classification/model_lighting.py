@@ -33,6 +33,8 @@ class QuantImageNetClassification(LightningModule):
         self.hparams = hparams
         arch = self.hparams.model.ARCH
         self.model = models_dict[arch](self.hparams)
+        Task.init(project_name=arch, task_name=hparams.NAME_PREFIX, auto_connect_arg_parser=False)
+
         self.configure_loss()
         self.load_pretrained_model()
 
@@ -51,6 +53,7 @@ class QuantImageNetClassification(LightningModule):
 
     def set_random_seed(self, seed):
         torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
         np.random.seed(seed)
         random.seed(seed)
 

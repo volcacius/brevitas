@@ -5,6 +5,8 @@ model:
   FIRST_LAYER_WEIGHT_BIT_WIDTH: 8
   BIT_WIDTH: 4
 
+NAME_PREFIX: ${model.ARCH}_${model.FIRST_LAYER_WEIGHT_BIT_WIDTH}b_${model.BIT_WIDTH}b
+
 preprocess:
   MEAN:
     - 0.485

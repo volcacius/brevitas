@@ -1,6 +1,7 @@
 from enum import Enum, auto
 import logging
-import argparse
+from trains import Task
+
 
 import flatdict
 from omegaconf import Config
@@ -69,6 +70,11 @@ class HydraTestTubeLogger(TestTubeLogger):
         # Log into tensorboard hparams plugin (supported in Pytorch 1.3)
         if hasattr(self.experiment, 'add_hparams'):
             self.experiment.add_hparams(flatten_hparams, metric_dict={})
+
+        # Log into trains
+        Task.current_task().connect(flatten_hparams)
+        model_config, _ = filter_keys(flatten_hparams, ['model', 'preprocess'], return_dict=True)
+        Task.current_task().set_model_config(model_config)
 
     @rank_zero_only
     def log_metrics(self, metrics, step_num=None):
