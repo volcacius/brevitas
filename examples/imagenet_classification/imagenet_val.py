@@ -32,6 +32,7 @@ def main(hparams):
         cudnn.benchmark = True
 
     val_loader = imagenet_val_loader(data_path=hparams.DATADIR,
+                                     workers=hparams.WORKERS,
                                      batch_size=hparams.VAL_BATCH_SIZE,
                                      mean=hparams.preprocess.MEAN,
                                      std=hparams.preprocess.STD)

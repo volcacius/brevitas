@@ -192,6 +192,7 @@ class QuantImageNetClassification(LightningModule):
                                                worker_init_fn=_worker_init_fn)
         else:
             dataloader = imagenet_val_loader(batch_size=self.hparams.VAL_BATCH_SIZE,
+                                             workers=self.hparams.WORKERS,
                                              data_path=self.hparams.DATADIR,
                                              mean=mean,
                                              std=std)

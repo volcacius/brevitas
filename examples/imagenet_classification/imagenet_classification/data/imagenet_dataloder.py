@@ -42,6 +42,7 @@ def imagenet_train_loader(data_path,
 
 def imagenet_val_loader(data_path,
                         batch_size,
+                        workers,
                         mean,
                         std):
     valdir = os.path.join(data_path, 'val')
@@ -55,7 +56,6 @@ def imagenet_val_loader(data_path,
                             sampler=None,
                             batch_size=batch_size,
                             shuffle=False,
-                            num_workers=0,
-                            worker_init_fn=None,
+                            num_workers=workers,
                             pin_memory=True)
     return val_loader
