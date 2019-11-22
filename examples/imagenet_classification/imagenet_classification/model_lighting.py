@@ -33,7 +33,7 @@ class QuantImageNetClassification(LightningModule):
         self.hparams = hparams
         arch = self.hparams.model.ARCH
         self.model = models_dict[arch](self.hparams)
-        if hparams.TRAINS_LOGGING:
+        if hparams.log.TRAINS_LOGGING:
             Task.init(project_name=arch, task_name=hparams.NAME_PREFIX, auto_connect_arg_parser=False)
 
         self.configure_loss()

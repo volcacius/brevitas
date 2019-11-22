@@ -72,7 +72,7 @@ class HydraTestTubeLogger(TestTubeLogger):
             self.experiment.add_hparams(flatten_hparams, metric_dict={})
 
         # Log into trains
-        if hparams.TRAINS_LOGGING:
+        if hparams.log.TRAINS_LOGGING:
             Task.current_task().connect(flatten_hparams)
             model_config, _ = filter_keys(flatten_hparams, ['model', 'preprocess'], return_dict=True)
             Task.current_task().set_model_config(model_config)
