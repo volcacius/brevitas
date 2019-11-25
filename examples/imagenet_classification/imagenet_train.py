@@ -96,6 +96,37 @@ class CustomDdpTrainer(Trainer):
         # continue training routine
         self.run_pretrain_routine(model)
 
+    def transfer_batch_to_gpu(self, batch, gpu_id, non_blocking):
+        # base case: object can be directly moved using `cuda` or `to`
+        if callable(getattr(batch, 'cuda', None)):
+            return batch.cuda(gpu_id, non_blocking=non_blocking)
+
+        elif callable(getattr(batch, 'to', None)):
+            return batch.to(torch.device('cuda', gpu_id), non_blocking=non_blocking)
+
+        # when list
+        elif isinstance(batch, list):
+            for i, x in enumerate(batch):
+                batch[i] = self.transfer_batch_to_gpu(x, gpu_id, non_blocking)
+            return batch
+
+        # when tuple
+        elif isinstance(batch, tuple):
+            batch = list(batch)
+            for i, x in enumerate(batch):
+                batch[i] = self.transfer_batch_to_gpu(x, gpu_id, non_blocking)
+            return tuple(batch)
+
+        # when dict
+        elif isinstance(batch, dict):
+            for k, v in batch.items():
+                batch[k] = self.transfer_batch_to_gpu(v, gpu_id, non_blocking)
+
+            return batch
+
+        # nothing matches, return the value as is without transform
+        return batch
+
     def evaluation_forward(self, model, batch, batch_idx, dataloader_idx, test=False):
         # make dataloader_idx arg in validation_step optional
         args = [batch, batch_idx]
@@ -112,9 +143,15 @@ class CustomDdpTrainer(Trainer):
             root_gpu = 0
             if type(self.data_parallel_device_ids) is list:
                 root_gpu = self.data_parallel_device_ids[0]
-            batch = self.transfer_batch_to_gpu(batch, root_gpu)
+            batch = self.transfer_batch_to_gpu(batch, root_gpu, non_blocking=True)
             args[0] = batch
 
+        # handle DP, DDP forward
+        if self.use_ddp or self.use_dp or self.use_ddp2:
+            output = model(*args)
+            return output
+
+        # On CPU or single unwrapped GPU
         if test:
             output = model.test_step(*args)
         else:
@@ -141,15 +178,19 @@ class CustomDdpTrainer(Trainer):
         if self.truncated_bptt_steps is not None:
             args.append(hiddens)
 
-        # single GPU forward
+        # single GPU
         if self.single_gpu:
             gpu_id = 0
             if type(self.data_parallel_device_ids) is list:
                 gpu_id = self.data_parallel_device_ids[0]
-            batch = self.transfer_batch_to_gpu(batch, gpu_id)
+            batch = self.transfer_batch_to_gpu(batch, gpu_id, non_blocking=True)
             args[0] = batch
 
-        output = self.model.training_step(*args)
+        # distributed forward
+        if self.use_ddp or self.use_ddp2 or self.use_dp:
+            output = self.model(*args)
+        else:
+            output = self.model.training_step(*args)
 
         # allow any mode to define training_end
         if self.is_overriden('training_end'):
