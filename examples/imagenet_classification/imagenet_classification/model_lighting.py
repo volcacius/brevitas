@@ -72,7 +72,7 @@ class QuantImageNetClassification(LightningModule):
         self.set_random_seed(self.hparams.SEED + device_ids[0])
         if torch.distributed.is_available():
             from .apex_lightning import LightningApexDistributedDataParallel as ApexDDP
-            model = ApexDDP(model, device_ids=device_ids)
+            model = ApexDDP(model)
         else:
             raise Exception("Can't invoke DDP when torch.distributed is not available")
         return model
