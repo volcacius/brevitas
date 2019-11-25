@@ -63,7 +63,7 @@ def main():
     for local_rank, gpu in enumerate(gpus_list):
 
         # Each process's rank
-        dist_rank = args.nproc_per_node * args.node_rank + local_rank
+        dist_rank = len(gpus_list) * args.node_rank + local_rank
         current_env["GLOBAL_RANK"] = str(dist_rank)
 
         # Spawn the processes passing the local rank as GPU, given that CUDA_VISIBLE_DEVICES is set
