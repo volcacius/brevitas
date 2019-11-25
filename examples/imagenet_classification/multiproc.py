@@ -21,7 +21,7 @@ def parse_args():
                         help="The number of nodes to use for distribute training")
     parser.add_argument("--node_rank", type=int, default=0,
                         help="The rank of the node for multi-node distributed training")
-    parser.add_argument("--gpus", type=int, default=0,
+    parser.add_argument("--gpus", type=str, default='0',
                         help="The selected GPUs in the node. The number of GPUs per node have to be the same.")
     parser.add_argument("--master_addr", default="127.0.0.1", type=str,
                         help="Master node (rank 0)'s address, should be either the IP address or the hostname of "
