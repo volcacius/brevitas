@@ -108,7 +108,7 @@ def main(hparams):
     else:
         distributed_backend = None
 
-    trainer = CustomDdpTrainer(gpus=hparams.GPUS,
+    trainer = CustomDdpTrainer(gpus=str(hparams.GPU),
                                show_progress_bar=False,
                                distributed_backend=distributed_backend,
                                nb_gpu_nodes=hparams.NUM_NODES,
