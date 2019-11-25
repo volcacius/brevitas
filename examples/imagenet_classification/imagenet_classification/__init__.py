@@ -1,12 +1,13 @@
 import builtins
-from torch.nn.parallel import DistributedDataParallel
+from pytorch_lightning.pt_overrides.override_data_parallel import LightningDistributedDataParallel
 from .apex_lightning import LightningApexDistributedDataParallel
 
 
 # Ugly workaround
 
 def _isinstance(instance, clz):
-    if clz is DistributedDataParallel and builtins.isinstance_orig(instance, LightningApexDistributedDataParallel):
+    if clz is LightningDistributedDataParallel \
+            and builtins.isinstance_orig(instance, LightningApexDistributedDataParallel):
         return True
     return builtins.isinstance_orig(instance, clz)
 
