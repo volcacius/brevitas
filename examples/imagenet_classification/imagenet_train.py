@@ -41,6 +41,17 @@ class CustomDdpTrainer(Trainer):
     def init_ddp_connection(self, proc_rank, world_size):
         dist.init_process_group('nccl', rank=proc_rank, world_size=world_size)
 
+    def set_distributed_mode(self, distributed_backend, nb_gpu_nodes):
+        # skip for CPU
+        if self.num_gpus == 0:
+            return
+
+        self.single_gpu = False
+        if distributed_backend is not None:
+            self.use_dp = distributed_backend == 'dp'
+            self.use_ddp = distributed_backend == 'ddp'
+            self.use_ddp2 = distributed_backend == 'ddp2'
+
     def ddp_train(self, gpu_nb, model):
 
         # Flags set by multiproc.py
