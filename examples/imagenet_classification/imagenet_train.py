@@ -53,8 +53,6 @@ class CustomDdpTrainer(Trainer):
             self.use_ddp = distributed_backend == 'ddp'
             self.use_ddp2 = distributed_backend == 'ddp2'
 
-        logging.info
-
     def ddp_train(self, gpu_nb, model):
 
         # Flags set by multiproc.py
@@ -98,6 +96,32 @@ class CustomDdpTrainer(Trainer):
         # continue training routine
         self.run_pretrain_routine(model)
 
+    def evaluation_forward(self, model, batch, batch_idx, dataloader_idx, test=False):
+        # make dataloader_idx arg in validation_step optional
+        args = [batch, batch_idx]
+
+        if test and len(self.get_test_dataloaders()) > 1:
+            args.append(dataloader_idx)
+
+        elif not test and len(self.get_val_dataloaders()) > 1:
+            args.append(dataloader_idx)
+
+        # single GPU
+        if self.single_gpu:
+            # for single GPU put inputs on gpu manually
+            root_gpu = 0
+            if type(self.data_parallel_device_ids) is list:
+                root_gpu = self.data_parallel_device_ids[0]
+            batch = self.transfer_batch_to_gpu(batch, root_gpu)
+            args[0] = batch
+
+        if test:
+            output = model.test_step(*args)
+        else:
+            output = model.validation_step(*args)
+
+        return output
+
     def training_forward(self, batch, batch_nb, opt_idx, hiddens):
         """
         Handle forward for each training case (distributed, single gpu, etc...)
@@ -117,22 +141,15 @@ class CustomDdpTrainer(Trainer):
         if self.truncated_bptt_steps is not None:
             args.append(hiddens)
 
-        # distributed forward
-        if self.use_ddp or self.use_ddp2 or self.use_dp:
-            output = self.model(*args)
-
         # single GPU forward
-        elif self.single_gpu:
+        if self.single_gpu:
             gpu_id = 0
             if type(self.data_parallel_device_ids) is list:
                 gpu_id = self.data_parallel_device_ids[0]
             batch = self.transfer_batch_to_gpu(batch, gpu_id)
             args[0] = batch
-            output = self.model.training_step(*args)
 
-        # CPU forward
-        else:
-            output = self.model.training_step(*args)
+        output = self.model.training_step(*args)
 
         # allow any mode to define training_end
         if self.is_overriden('training_end'):
