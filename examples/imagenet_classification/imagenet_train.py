@@ -36,7 +36,8 @@ class CustomDdpTrainer(Trainer):
     def set_nvidia_flags(self, is_slurm_managing_tasks, data_parallel_device_ids):
         if data_parallel_device_ids is None:
             return
-        logging.info(f'VISIBLE GPUS: {os.environ["CUDA_VISIBLE_DEVICES"]}')
+        if self.use_ddp:
+            logging.info(f'VISIBLE GPUS: {os.environ["CUDA_VISIBLE_DEVICES"]}')
 
     def init_ddp_connection(self, proc_rank, world_size):
         dist.init_process_group('nccl', rank=proc_rank, world_size=world_size)
@@ -46,11 +47,13 @@ class CustomDdpTrainer(Trainer):
         if self.num_gpus == 0:
             return
 
-        self.single_gpu = False
+        self.single_gpu = True
         if distributed_backend is not None:
             self.use_dp = distributed_backend == 'dp'
             self.use_ddp = distributed_backend == 'ddp'
             self.use_ddp2 = distributed_backend == 'ddp2'
+
+        logging.info
 
     def ddp_train(self, gpu_nb, model):
 
@@ -94,6 +97,52 @@ class CustomDdpTrainer(Trainer):
 
         # continue training routine
         self.run_pretrain_routine(model)
+
+    def training_forward(self, batch, batch_nb, opt_idx, hiddens):
+        """
+        Handle forward for each training case (distributed, single gpu, etc...)
+        :param batch:
+        :param batch_nb:
+        :return:
+        """
+        # ---------------
+        # FORWARD
+        # ---------------
+        # enable not needing to add opt_idx to training_step
+        args = [batch, batch_nb]
+        if len(self.optimizers) > 1:
+            args.append(opt_idx)
+
+        # pass hiddens if using tbptt
+        if self.truncated_bptt_steps is not None:
+            args.append(hiddens)
+
+        # distributed forward
+        if self.use_ddp or self.use_ddp2 or self.use_dp:
+            output = self.model(*args)
+
+        # single GPU forward
+        elif self.single_gpu:
+            gpu_id = 0
+            if type(self.data_parallel_device_ids) is list:
+                gpu_id = self.data_parallel_device_ids[0]
+            batch = self.transfer_batch_to_gpu(batch, gpu_id)
+            args[0] = batch
+            output = self.model.training_step(*args)
+
+        # CPU forward
+        else:
+            output = self.model.training_step(*args)
+
+        # allow any mode to define training_end
+        if self.is_overriden('training_end'):
+            model_ref = self.get_model()
+            output = model_ref.training_end(output)
+
+        # format and reduce outputs accordingly
+        output = self.process_output(output, train=True)
+
+        return output
 
 
 @hydra.main(config_path='conf/train_config.yaml', strict=False)
