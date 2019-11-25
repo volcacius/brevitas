@@ -55,9 +55,6 @@ class CustomDdpTrainer(Trainer):
         if self.logger is not None:
             self.logger.rank = self.proc_rank
 
-        # set up server using proc 0's ip address
-        # try to init for 20 times at max in case ports are taken
-        # where to store ip_table
         model.trainer = self
         model.init_ddp_connection(self.proc_rank, self.world_size)
 
@@ -103,6 +100,7 @@ def main(hparams):
     trainer = CustomDdpTrainer(gpus=hparams.GPUS,
                                show_progress_bar=False,
                                distributed_backend=distributed_backend,
+                               nb_gpu_nodes=hparams.NUM_NODES,
                                row_log_interval=hparams.log.INTERVAL,
                                log_save_interval=hparams.log.SAVE_INTERVAL,
                                weights_summary='top',

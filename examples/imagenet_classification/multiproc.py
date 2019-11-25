@@ -70,8 +70,8 @@ def main():
         cmd = [sys.executable,
                "-u",
                args.training_script,
-               " IS_DISTRIBUTED=True",
-               " GPU={}".format(local_rank)] + args.training_script_args
+               "IS_DISTRIBUTED=True",
+               "GPU={}".format(local_rank)] + args.training_script_args
 
         print(cmd)
         process = subprocess.Popen(cmd, env=current_env, stdout=None)  # Don't redirect stdout
