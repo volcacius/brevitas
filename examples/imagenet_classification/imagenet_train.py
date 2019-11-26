@@ -25,6 +25,7 @@ def main(hparams):
 
     # A single GPU id has to be passed as a string, otherwise it will be interpreted as # of GPUs
     trainer = CustomDdpTrainer(gpus=str(hparams.GPU),
+                               max_nb_epochs=hparams.EPOCHS,
                                show_progress_bar=False,
                                distributed_backend=distributed_backend,
                                nb_gpu_nodes=hparams.NUM_NODES,
