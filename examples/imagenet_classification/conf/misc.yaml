@@ -5,8 +5,9 @@ GPU: 0
 NUM_NODES: 1
 VAL_BATCH_SIZE: 1024
 NAME_PREFIX: ${model.ARCH}_${model.FIRST_LAYER_WEIGHT_BIT_WIDTH}b_${model.BIT_WIDTH}b
+OUTPUT_DIR: .
 
 
 hydra:
   run:
-    dir: ./outputs/${model.ARCH}/${NAME_PREFIX}/${now:%Y%m%d_%H%M}/GPU${GPU}
+    dir: ${OUTPUT_DIR}/outputs/${model.ARCH}/${NAME_PREFIX}/${now:%Y%m%d_%H%M}/GPU${GPU}
