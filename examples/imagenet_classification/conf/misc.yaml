@@ -7,4 +7,4 @@ VAL_BATCH_SIZE: 1024
 
 hydra:
   run:
-    dir: outputs/%{model.ARCH}/${NAME_PREFIX}/${now:%Y%m%d_%H%M}/GPU${GPU}
+    dir: outputs/${model.ARCH}/${NAME_PREFIX}/${now:%Y%m%d_%H%M}/GPU${GPU}
