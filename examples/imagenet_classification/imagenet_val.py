@@ -25,10 +25,10 @@ def main(hparams):
     state_dict = state_dict_from_url_or_path(hparams.model.PRETRAINED_PTH)
     model.load_state_dict(state_dict, strict=True)
 
-    if hparams.GPUS is not None:
-        assert isinstance(hparams.GPUS, int), 'At most one GPU is supported for validation'
-        torch.cuda.set_device(hparams.GPUS)
-        model = model.cuda(hparams.GPUS)
+    if hparams.GPU is not None:
+        assert isinstance(hparams.GPU, int), 'At most one GPU is supported for validation'
+        torch.cuda.set_device(hparams.GPU)
+        model = model.cuda(hparams.GPU)
         cudnn.benchmark = True
 
     val_loader = imagenet_val_loader(data_path=hparams.DATADIR,
@@ -36,7 +36,7 @@ def main(hparams):
                                      batch_size=hparams.VAL_BATCH_SIZE,
                                      mean=hparams.preprocess.MEAN,
                                      std=hparams.preprocess.STD)
-    validate(val_loader, model, hparams.GPUS)
+    validate(val_loader, model, hparams.GPU)
     return
 
 

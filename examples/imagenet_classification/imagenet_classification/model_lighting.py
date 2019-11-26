@@ -5,7 +5,8 @@ https://github.com/williamFalcon/pytorch-lightning/blob/master/pl_examples/full_
 
 from collections import OrderedDict
 import random
-import logging
+import os
+from pathlib import Path
 
 import pytorch_lightning as pl
 import torch
@@ -33,8 +34,12 @@ class QuantImageNetClassification(LightningModule):
         self.hparams = hparams
         arch = self.hparams.model.ARCH
         self.model = models_dict[arch](self.hparams)
+
+        exp_timestamp = Path(os.getcwd()).parents[0].parts[-1]
         if hparams.log.TRAINS_LOGGING:
-            Task.init(project_name=arch, task_name=hparams.NAME_PREFIX, auto_connect_arg_parser=False)
+            Task.init(project_name=arch,
+                      task_name='{}_{}'.format(exp_timestamp, hparams.NAME_PREFIX),
+                      auto_connect_arg_parser=False)
 
         self.configure_loss()
         self.load_pretrained_model()
@@ -71,7 +76,7 @@ class QuantImageNetClassification(LightningModule):
         assert len(device_ids) == 1, 'Only 1 GPU per process supported'
         self.set_random_seed(self.hparams.SEED + device_ids[0])
         if torch.distributed.is_available():
-            from .apex_lightning import LightningApexDistributedDataParallel as ApexDDP
+            from .pl_overrides.pl_apex import LightningApexDistributedDataParallel as ApexDDP
             model = ApexDDP(model)
         else:
             raise Exception("Can't invoke DDP when torch.distributed is not available")

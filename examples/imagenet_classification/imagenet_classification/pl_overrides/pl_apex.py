@@ -16,9 +16,18 @@
 import torch
 import torch.distributed as dist
 from apex.parallel import DistributedDataParallel as ApexDistributedDataParallel
-
+from pytorch_lightning.pt_overrides.override_data_parallel import LightningDistributedDataParallel
 
 class LightningApexDistributedDataParallel(ApexDistributedDataParallel):
+
+    """
+    Override the __class__ property so that isinstance() and type() method calls in pytorch_lightning against
+    LightningDistributedDataParallel work.
+    """
+    @property
+    def __class__(self):
+        return LightningDistributedDataParallel
+
     """
     Override the forward call in lightning so it goes to training and validation step respectively
     Inherit also from LightningDistributedDataParallel as the second parent so that

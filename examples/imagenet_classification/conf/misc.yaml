@@ -4,3 +4,7 @@ WORKERS: 0
 GPU: 0
 NUM_NODES: 1
 VAL_BATCH_SIZE: 1024
+
+hydra:
+  run:
+    dir: outputs/%{model.ARCH}/${NAME_PREFIX}/${now:%Y%m%d_%H%M}/GPU${GPU}
