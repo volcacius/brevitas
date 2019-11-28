@@ -1,6 +1,5 @@
 import logging
-from trains import Task
-
+from enum import auto
 
 import flatdict
 from omegaconf import Config
@@ -8,7 +7,7 @@ from pytorch_lightning.logging import TestTubeLogger
 from pytorch_lightning.logging.base import rank_zero_only
 from trains import Task
 
-from .utils import filter_keys
+from .utils import filter_keys, AutoName
 
 LOG_STAGE_LOG_KEY = 'log_stage'
 BATCH_IDX_LOG_KEY = 'batch_idx'
@@ -31,14 +30,6 @@ TRAIN_TOP5_METER = TRAIN_ + TOP5_LOG_KEY + METER_SUFFIX
 VAL_LOSS_METER = VAL_ + LOSS_LOG_KEY + METER_SUFFIX
 VAL_TOP1_METER = VAL_ + TOP1_LOG_KEY + METER_SUFFIX
 VAL_TOP5_METER = VAL_ + TOP5_LOG_KEY + METER_SUFFIX
-
-
-class AutoName(str, Enum):
-    def _generate_next_value_(name, start, count, last_values):
-         return name
-
-    def __str__(self):
-        return self.value
 
 
 class LogStage(AutoName):

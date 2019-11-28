@@ -1,5 +1,6 @@
 import os
 from urllib.parse import urlparse
+from enum import Enum
 
 import torch
 
@@ -67,6 +68,14 @@ def topk_accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul(100.0 / batch_size))
         return res
+
+
+class AutoName(str, Enum):
+    def _generate_next_value_(name, start, count, last_values):
+         return name
+
+    def __str__(self):
+        return self.value
 
 
 class MissingOptionalDependency:
