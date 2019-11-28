@@ -1,6 +1,6 @@
 model:
   ARCH: quant_proxylessnas_mobile14
-  PRETRAINED_PTH: https://github.com/Xilinx/brevitas/releases/download/quant_proxylessnas_mobile14_4b-r0/quant_proxylessnas_mobile14_4b-e10882e1.pth
+  PRETRAINED_MODEL: https://github.com/Xilinx/brevitas/releases/download/quant_proxylessnas_mobile14_4b-r0/quant_proxylessnas_mobile14_4b-e10882e1.pth
   FIRST_LAYER_WEIGHT_BIT_WIDTH: 8
   DEPTHWISE_BIT_WIDTH: 4
   BIT_WIDTH: 4

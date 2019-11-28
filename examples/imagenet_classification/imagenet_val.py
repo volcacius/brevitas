@@ -21,8 +21,8 @@ def main(hparams):
 
     model = models_dict[hparams.model.ARCH](hparams)
 
-    assert hparams.model.PRETRAINED_PTH is not None, 'Validation requires a pretrained model'
-    state_dict = state_dict_from_url_or_path(hparams.model.PRETRAINED_PTH)
+    assert hparams.model.PRETRAINED_MODEL is not None, 'Validation requires a pretrained model'
+    state_dict = state_dict_from_url_or_path(hparams.model.PRETRAINED_MODEL)
     model.load_state_dict(state_dict, strict=True)
 
     if hparams.GPU is not None:

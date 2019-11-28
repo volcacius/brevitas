@@ -1,4 +1,3 @@
-from enum import Enum, auto
 import logging
 from trains import Task
 
@@ -7,6 +6,8 @@ import flatdict
 from omegaconf import Config
 from pytorch_lightning.logging import TestTubeLogger
 from pytorch_lightning.logging.base import rank_zero_only
+from trains import Task
+
 from .utils import filter_keys
 
 LOG_STAGE_LOG_KEY = 'log_stage'
@@ -74,8 +75,6 @@ class HydraTestTubeLogger(TestTubeLogger):
         # Log into trains
         if hparams.log.TRAINS_LOGGING:
             Task.current_task().connect(flatten_hparams)
-            model_config, _ = filter_keys(flatten_hparams, ['model', 'preprocess'], return_dict=True)
-            Task.current_task().set_model_config(model_config)
 
     @rank_zero_only
     def log_metrics(self, metrics, step_num=None):

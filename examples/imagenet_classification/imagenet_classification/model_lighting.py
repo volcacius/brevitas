@@ -5,8 +5,6 @@ https://github.com/williamFalcon/pytorch-lightning/blob/master/pl_examples/full_
 
 from collections import OrderedDict
 import random
-import os
-from pathlib import Path
 
 import pytorch_lightning as pl
 import torch
@@ -34,13 +32,6 @@ class QuantImageNetClassification(LightningModule):
         self.hparams = hparams
         arch = self.hparams.model.ARCH
         self.model = models_dict[arch](self.hparams)
-
-        exp_timestamp = Path(os.getcwd()).parents[0].parts[-1]
-        if hparams.log.TRAINS_LOGGING:
-            Task.init(project_name=arch,
-                      task_name='{}_{}'.format(exp_timestamp, hparams.NAME_PREFIX),
-                      auto_connect_arg_parser=False)
-
         self.configure_loss()
         self.load_pretrained_model()
 
@@ -65,12 +56,19 @@ class QuantImageNetClassification(LightningModule):
 
     def load_pretrained_model(self):
         try:
-            pretrained_pth = self.hparams.model.PRETRAINED_PTH
+            pretrained_model = self.hparams.model.PRETRAINED_MODEL
         except KeyError:
             return
-        if pretrained_pth is not None:
-            self.model.load_state_dict(state_dict_from_url_or_path((pretrained_pth)), strict=True)
-            logging.info('Loaded .pth at: {}'.format(pretrained_pth))
+        if pretrained_model is not None:
+            self.model.load_state_dict(state_dict_from_url_or_path((pretrained_model)), strict=True)
+            logging.info('Loaded .pth at: {}'.format(pretrained_model))
+
+    def on_save_checkpoint(self, checkpoint):
+        # Remove prefix 'model.' from the saved model
+        state_dict = checkpoint['state_dict']
+        keys = state_dict.keys()
+        for k in list(keys):  # list takes a copy of the keys
+            state_dict[k.lstrip('model.')] = state_dict.pop(k)
 
     def configure_ddp(self, model, device_ids):
         assert len(device_ids) == 1, 'Only 1 GPU per process supported'
@@ -155,7 +153,9 @@ class QuantImageNetClassification(LightningModule):
                     VAL_TOP1_METER: self.val_top1_meter,
                     VAL_TOP5_METER: self.val_top5_meter}
 
-        result = {'log': log_dict, 'val_loss': log_dict[VAL_LOSS_METER].avg}
+        result = {'log': log_dict,
+                  'val_top1': log_dict[VAL_TOP1_METER].avg,
+                  'val_loss': log_dict[VAL_LOSS_METER].avg}
         return result
 
     def test_step(self, batch, batch_idx):

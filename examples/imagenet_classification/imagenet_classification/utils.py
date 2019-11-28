@@ -39,13 +39,16 @@ def filter_keys(dict_to_filter, filters, return_dict=False):
         return include_dict.values(), exclude_dict.values()
 
 
-def state_dict_from_url_or_path(pretrained_pth):
-    if os.path.exists(pretrained_pth):
-        state_dict = torch.load(pretrained_pth, map_location='cpu')
-    elif urlparse(pretrained_pth).netloc:  # validates the url
-        state_dict = torch.hub.load_state_dict_from_url(pretrained_pth, map_location='cpu')
+def state_dict_from_url_or_path(pretrained_model):
+    if os.path.exists(pretrained_model):
+        if pretrained_model.lower().endswith('.pth'):
+            state_dict = torch.load(pretrained_model, map_location='cpu')
+        else:
+            state_dict = torch.load(pretrained_model['state_dict'], map_location='cpu')
+    elif urlparse(pretrained_model).netloc:  # validates the url
+        state_dict = torch.hub.load_state_dict_from_url(pretrained_model, map_location='cpu')
     else:
-        raise Exception("Cant' load pretrained model at: {}".format(pretrained_pth))
+        raise Exception("Cant' load pretrained model at: {}".format(pretrained_model))
     return state_dict
 
 
