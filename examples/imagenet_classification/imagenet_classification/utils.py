@@ -38,6 +38,9 @@ def filter_keys(dict_to_filter, filters, return_dict=False):
     else:
         return include_dict.values(), exclude_dict.values()
 
+def lowercase_keys(d):
+    return {k.lower(): v for k, v in d.items()}
+
 
 def state_dict_from_url_or_path(pretrained_model):
     if os.path.exists(pretrained_model):
@@ -65,3 +68,11 @@ def topk_accuracy(output, target, topk=(1,)):
             res.append(correct_k.mul(100.0 / batch_size))
         return res
 
+
+class MissingOptionalDependency:
+
+    def __init__(self, e):
+        self.e = e
+
+    def __call__(self, *args, **kwargs):
+        raise Exception('Missing optional dependency, {}'.format(self.e))

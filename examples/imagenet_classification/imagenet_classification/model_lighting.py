@@ -6,23 +6,39 @@ https://github.com/williamFalcon/pytorch-lightning/blob/master/pl_examples/full_
 from collections import OrderedDict
 import random
 
+from .utils import MissingOptionalDependency
+
+import apex
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
 import numpy as np
+from functools import partial
 from pytorch_lightning.root_module.root_module import LightningModule
 from torch import optim
 from torch.nn import CrossEntropyLoss
+from torch.optim import SGD
+from apex.optimizers import FusedAdam
+from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
+
+try:
+    from apex.optimizers import FusedNovoGrad
+except Exception as e:
+    FusedNovoGrad = MissingOptionalDependency(e)
 
 from .data.imagenet_dataloder import imagenet_train_loader, imagenet_val_loader
 from .models import models_dict
 from .smoothing import LabelSmoothing
 from .hydra_logger import *
-from .utils import filter_keys, state_dict_from_url_or_path, topk_accuracy, AverageMeter
+from .utils import filter_keys, state_dict_from_url_or_path, topk_accuracy, AverageMeter, lowercase_keys
 
 
-optim_impl = {'SGD': optim.SGD}
-scheduler_impl = {'COSINE': optim.lr_scheduler.CosineAnnealingLR}
+optim_impl = {'SGD': SGD,
+              'ADAM': FusedAdam,
+              'NOVOGRAD': FusedNovoGrad}
+
+scheduler_impl = {'COSINE': lambda t_max: partial(CosineAnnealingLR, T_max=t_max), # normalize case
+                  'MULTISTEP' : MultiStepLR}
 
 
 class QuantImageNetClassification(LightningModule):
@@ -89,6 +105,19 @@ class QuantImageNetClassification(LightningModule):
         else:
             loss = self.__loss_fn(output, target)
             return loss, output
+
+    def optimizer_step(self, current_epoch, batch_nb, optimizer, optimizer_i, second_order_closure=None):
+
+        # LR warmup batch-by-batch
+        if current_epoch < self.hparams.WARMUP_EPOCHS:
+            warmup_batches = self.trainer.nb_training_batches * self.hparams.WARMUP_EPOCHS
+            lr_scale = min(1., float(self.trainer.global_step + 1) / warmup_batches)
+            for pg in optimizer.param_groups:
+                pg['lr'] = lr_scale * self.hparams.optim_conf.LR
+
+        # update params
+        optimizer.step()
+        optimizer.zero_grad()
 
     def training_step(self, batch, batch_idx):
         images, target = batch
@@ -167,9 +196,9 @@ class QuantImageNetClassification(LightningModule):
     def configure_optimizers(self):
         no_wd_params, wd_params = filter_keys(self.named_parameters(), self.hparams.NO_WD)
         optim_dict = [{'params': no_wd_params, 'weight_decay': 0.0},
-                      {'params': wd_params, 'weight_decay': self.hparams.optim_conf.weight_decay}]
-        optimizer = optim_impl[self.hparams.OPTIMIZER](optim_dict, **self.hparams.optim_conf)
-        scheduler = scheduler_impl[self.hparams.SCHEDULER](optimizer, **self.hparams.scheduler_conf)
+                      {'params': wd_params, 'weight_decay': self.hparams.optim_conf.WEIGHT_DECAY}]
+        optimizer = optim_impl[self.hparams.OPTIMIZER](optim_dict, **lowercase_keys(self.hparams.optim_conf))
+        scheduler = scheduler_impl[self.hparams.SCHEDULER](optimizer, **lowercase_keys(self.hparams.scheduler_conf))
         return [optimizer], [scheduler]
 
     def configure_loss(self):

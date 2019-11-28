@@ -1,20 +1,23 @@
 TRAIN_BATCH_SIZE: 256
 IS_DISTRIBUTED: False
 MIXED_PRECISION: False
-EPOCHS: 120
+EPOCHS: 30
 
 LABEL_SMOOTHING: 0.0
 
 OPTIMIZER: SGD
 optim_conf:
-  lr: 0.01
-  weight_decay: 0.0001
-  nesterov: False
+  LR: 0.001
+  WEIGHT_DECAY: 0.0001
+  NESTEROV: False
 
-SCHEDULER: COSINE
+SCHEDULER: MULTISTEP
+WARMUP_EPOCHS: 0
 scheduler_conf:
-  T_max: 10
-
+  GAMMA: 0.1
+  MILESTONES:
+    - 10
+    - 20
 
 dropout:
   RATE: 0.2
