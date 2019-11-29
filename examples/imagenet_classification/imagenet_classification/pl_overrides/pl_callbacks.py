@@ -46,9 +46,10 @@ class BestModelCheckpoint(Callback):
             raise Exception("Can't save best model without the required metric being logged")
         else:
             if self.monitor_op(current, self.best):
-                    self.best = current
                     self.save_model(self.filepath)
                     logging.info(f'\nEpoch {epoch + 1:05d}: {self.monitor} improved'
                                  f' from {self.best:0.5f} to {current:0.5f},'
                                  f' saving model to {self.filepath}')
+                    self.best = current
+
 
