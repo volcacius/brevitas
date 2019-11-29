@@ -4,6 +4,8 @@ from enum import Enum
 
 import torch
 
+IGNORE_VALUE = -1
+
 
 class AverageMeter(object):
 
@@ -22,7 +24,11 @@ class AverageMeter(object):
 
     @property
     def avg(self):
-        return self.sum / self.count
+        if self.count == 0:
+            # Has to be a tensor cause .item() is called on it
+            return torch.tensor(IGNORE_VALUE)
+        else:
+            return self.sum / self.count
 
 
 def filter_keys(dict_to_filter, filters, return_dict=False):

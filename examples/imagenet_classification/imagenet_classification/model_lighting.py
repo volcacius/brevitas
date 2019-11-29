@@ -126,8 +126,8 @@ class QuantImageNetClassification(LightningModule):
         train_top1, train_top5 = topk_accuracy(output, target, topk=(1, 5))
 
         self.train_loss_meter.update(train_loss.detach())
-        self.train_top1_meter.update(train_top1)
-        self.train_top5_meter.update(train_top5)
+        self.train_top1_meter.update(train_top1.detach())
+        self.train_top5_meter.update(train_top5.detach())
 
         log_dict = OrderedDict({
             LOG_STAGE_LOG_KEY: LogStage.TRAIN_BATCH,
@@ -158,9 +158,9 @@ class QuantImageNetClassification(LightningModule):
         val_loss, output = self.loss(output, target)
         val_top1, val_top5 = topk_accuracy(output, target, topk=(1, 5))
 
-        self.val_loss_meter.update(val_loss)
-        self.val_top1_meter.update(val_top1)
-        self.val_top5_meter.update(val_top5)
+        self.val_loss_meter.update(val_loss.detach())
+        self.val_top1_meter.update(val_top1.detach())
+        self.val_top5_meter.update(val_top5.detach())
 
         log_dict = {LOG_STAGE_LOG_KEY: LogStage.VAL_BATCH,
                     EPOCH_LOG_KEY: self.current_epoch,

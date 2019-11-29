@@ -7,7 +7,7 @@ from pytorch_lightning.logging import TestTubeLogger
 from pytorch_lightning.logging.base import rank_zero_only
 from trains import Task
 
-from .utils import filter_keys, AutoName
+from .utils import filter_keys, AutoName, IGNORE_VALUE
 
 LOG_STAGE_LOG_KEY = 'log_stage'
 BATCH_IDX_LOG_KEY = 'batch_idx'
@@ -88,27 +88,39 @@ class HydraTestTubeLogger(TestTubeLogger):
                 metrics_for_cli[metric] = metrics_for_tt[metric] = meters[k].val.item()
                 # add .avg only to cli during batch logging
                 metrics_for_cli[metric + AVG_SUFFIX] = meters[k].avg.item()
-            else:
+            else:  # EPOCH
                 # Add .avg to both cli and tt during epoch logging
                 metrics_for_cli[metric + AVG_SUFFIX] = metrics_for_tt[metric + AVG_SUFFIX] = meters[k].avg.item()
 
         # Log to test-tube
         self.experiment.log(metrics_for_tt, global_step=step_num)
+
         # Log to cli
-        self.log_metrics_cli(log_stage, metrics_for_cli, epoch, batch_idx, num_batches)
+        if log_stage == LogStage.TRAIN_BATCH or log_stage == LogStage.VAL_BATCH:
+            self.log_batch_metrics_cli(log_stage, metrics_for_cli, epoch, batch_idx, num_batches)
+        else:  # EPOCH
+            self.log_epoch_metrics_cli(metrics_for_cli, epoch)
 
     @rank_zero_only
-    def log_metrics_cli(self, log_stage, meters, epoch, batch_idx, num_batches):
-        if batch_idx is not None and num_batches is not None:
-            msg = '[{}][{}/{}][{}]\t'.format(epoch, batch_idx, num_batches, log_stage)
-        else:
-            msg = '[{}][{}]\t'.format(epoch, log_stage)
+    def log_batch_metrics_cli(self, log_stage, meters, epoch, batch_idx, num_batches):
+        msg = '[{}][{}/{}][{}]\t'.format(epoch, batch_idx, num_batches, log_stage)
         for k in meters.keys():
-            if AVG_SUFFIX not in k:
-                msg += ' {}: {:.4f}'.format(k, meters[k])
+            v = meters[k]
+            if AVG_SUFFIX not in k and v != IGNORE_VALUE:
+                msg += ' {}: {:.4f}'.format(k, v)
                 k_avg = k + '_avg'
                 if k_avg in meters:
                     msg = msg + ' [{:.4f}]'.format(meters[k_avg])
+                msg += '\t'
+        self.info(msg)
+
+    @rank_zero_only
+    def log_epoch_metrics_cli(self, meters, epoch):
+        msg = '[{}][{}]\t'.format(epoch, LogStage.EPOCH)
+        for k in meters.keys():
+            v = meters[k]
+            if v != IGNORE_VALUE:
+                msg += ' {}: {:.4f}'.format(k, meters[k])
                 msg += '\t'
         self.info(msg)
 
