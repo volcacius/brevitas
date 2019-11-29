@@ -50,7 +50,10 @@ def main(hparams):
                                use_amp=hparams.MIXED_PRECISION)
 
     # Call trainer
-    trainer.fit(model)
+    if hparams.EVALUATE_ONLY:
+        trainer.test(model)
+    else:
+        trainer.fit(model)
 
 
 if __name__ == '__main__':

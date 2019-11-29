@@ -8,7 +8,7 @@ log:
   SAVE_INTERVAL: 10
   TRAINS_LOGGING: False
 
-
+EVALUATE_ONLY: False
 
 
 
