@@ -66,7 +66,7 @@ def validate(val_loader, model, gpu):
             top1.update(acc1[0], images.size(0))
             top5.update(acc5[0], images.size(0))
             print_accuracy(i, num_batches, top1, top5)
-        print_final_accuracy(top1, top5, 'Total:')
+        print_final_accuracy(top1, top5)
     return
 
 
