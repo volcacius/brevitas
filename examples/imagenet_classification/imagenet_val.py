@@ -40,8 +40,13 @@ def main(hparams):
     return
 
 
-def print_accuracy(top1, top5, prefix=''):
-    print('{}Avg acc@1 {top1.avg:.3f} Avg acc@5 {top5.avg:.3f}'.format(prefix, top1=top1, top5=top5))
+def print_final_accuracy(top1, top5):
+    print('Avg val_top1 {.4f} val_top5 {:.4f}'.format(top1.avg, top5.avg))
+
+
+def print_accuracy(i, num_batches, top1, top5):
+    print('{}/{}: val_top1: {:.4f} [{:.4f}] val_top5: {:.4f} [{:.4f}]'
+          .format(i, num_batches, top1.val, top1.avg, top5.val, top5.avg))
 
 
 def validate(val_loader, model, gpu):
@@ -60,8 +65,8 @@ def validate(val_loader, model, gpu):
             acc1, acc5 = topk_accuracy(output, target, topk=(1, 5))
             top1.update(acc1[0], images.size(0))
             top5.update(acc5[0], images.size(0))
-            print_accuracy(top1, top5, '{}/{}: '.format(i, num_batches))
-        print_accuracy(top1, top5, 'Total:')
+            print_accuracy(i, num_batches, top1, top5)
+        print_final_accuracy(top1, top5, 'Total:')
     return
 
 
