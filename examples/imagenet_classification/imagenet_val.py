@@ -63,8 +63,8 @@ def validate(val_loader, model, gpu):
             output = model(images)
             # measure accuracy
             acc1, acc5 = topk_accuracy(output, target, topk=(1, 5))
-            top1.update(acc1[0], images.size(0))
-            top5.update(acc5[0], images.size(0))
+            top1.update(acc1.item(), images.size(0))
+            top5.update(acc5.item(), images.size(0))
             print_accuracy(i, num_batches, top1, top5)
         print_final_accuracy(top1, top5)
     return
