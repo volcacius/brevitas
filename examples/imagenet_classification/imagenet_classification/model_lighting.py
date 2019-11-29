@@ -158,9 +158,9 @@ class QuantImageNetClassification(LightningModule):
         val_loss, output = self.loss(output, target)
         val_top1, val_top5 = topk_accuracy(output, target, topk=(1, 5))
 
-        self.val_loss_meter.update(val_loss.detach())
-        self.val_top1_meter.update(val_top1.detach())
-        self.val_top5_meter.update(val_top5.detach())
+        self.val_loss_meter.update(val_loss.detach(), images.size(0))
+        self.val_top1_meter.update(val_top1.detach(), images.size(0))
+        self.val_top5_meter.update(val_top5.detach(), images.size(0))
 
         log_dict = {LOG_STAGE_LOG_KEY: LogStage.VAL_BATCH,
                     EPOCH_LOG_KEY: self.current_epoch,
