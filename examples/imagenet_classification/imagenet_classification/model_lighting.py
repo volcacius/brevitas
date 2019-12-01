@@ -46,23 +46,47 @@ class QuantImageNetClassification(LightningModule):
     def __init__(self, hparams):
         super(QuantImageNetClassification, self).__init__()
         self.hparams = hparams
-        arch = self.hparams.model.ARCH
-        self.model = models_dict[arch](self.hparams)
+        self.configure_model()
         self.configure_loss()
         self.load_pretrained_model()
-
-        # Set random seeds
         self.set_random_seed(hparams.SEED)
+        self.configure_meters()
 
-        # Setup meters to track training averages per epoch
+    def configure_meters(self):
         self.train_loss_meter = AverageMeter()
         self.train_top1_meter = AverageMeter()
         self.train_top5_meter = AverageMeter()
-
-        # Setup meters for logging val to cli
         self.val_loss_meter = AverageMeter()
         self.val_top1_meter = AverageMeter()
         self.val_top5_meter = AverageMeter()
+
+    def configure_model(self):
+        arch = self.hparams.model.ARCH
+        self.model = models_dict[arch](self.hparams)
+
+    def configure_optimizers(self):
+        no_wd_params, wd_params = filter_keys(self.named_parameters(), self.hparams.NO_WD)
+        optim_dict = [{'params': no_wd_params, 'weight_decay': 0.0},
+                      {'params': wd_params, 'weight_decay': self.hparams.optim_conf.WEIGHT_DECAY}]
+        optimizer = optim_impl[self.hparams.OPTIMIZER](optim_dict, **lowercase_keys(self.hparams.optim_conf))
+        scheduler = scheduler_impl[self.hparams.SCHEDULER](optimizer, **lowercase_keys(self.hparams.scheduler_conf))
+        return [optimizer], [scheduler]
+
+    def configure_loss(self):
+        if self.hparams.LABEL_SMOOTHING > 0.0:
+            self.__loss_fn = LabelSmoothing(self.hparams.LABEL_SMOOTHING)
+        else:
+            self.__loss_fn = CrossEntropyLoss()
+
+    def configure_ddp(self, model, device_ids):
+        assert len(device_ids) == 1, 'Only 1 GPU per process supported'
+        self.set_random_seed(self.hparams.SEED + device_ids[0])
+        if torch.distributed.is_available():
+            from .pl_overrides.pl_apex import LightningApexDistributedDataParallel as ApexDDP
+            model = ApexDDP(model)
+        else:
+            raise Exception("Can't invoke DDP when torch.distributed is not available")
+        return model
 
     def set_random_seed(self, seed):
         torch.manual_seed(seed)
@@ -85,16 +109,6 @@ class QuantImageNetClassification(LightningModule):
         keys = state_dict.keys()
         for k in list(keys):  # list takes a copy of the keys
             state_dict[k.lstrip('model.')] = state_dict.pop(k)
-
-    def configure_ddp(self, model, device_ids):
-        assert len(device_ids) == 1, 'Only 1 GPU per process supported'
-        self.set_random_seed(self.hparams.SEED + device_ids[0])
-        if torch.distributed.is_available():
-            from .pl_overrides.pl_apex import LightningApexDistributedDataParallel as ApexDDP
-            model = ApexDDP(model)
-        else:
-            raise Exception("Can't invoke DDP when torch.distributed is not available")
-        return model
 
     def loss(self, output, target):
         if isinstance(output, tuple):  # supports multi-sample dropout
@@ -192,20 +206,6 @@ class QuantImageNetClassification(LightningModule):
 
     def test_end(self, outputs):
         return self.validation_end(outputs)
-
-    def configure_optimizers(self):
-        no_wd_params, wd_params = filter_keys(self.named_parameters(), self.hparams.NO_WD)
-        optim_dict = [{'params': no_wd_params, 'weight_decay': 0.0},
-                      {'params': wd_params, 'weight_decay': self.hparams.optim_conf.WEIGHT_DECAY}]
-        optimizer = optim_impl[self.hparams.OPTIMIZER](optim_dict, **lowercase_keys(self.hparams.optim_conf))
-        scheduler = scheduler_impl[self.hparams.SCHEDULER](optimizer, **lowercase_keys(self.hparams.scheduler_conf))
-        return [optimizer], [scheduler]
-
-    def configure_loss(self):
-        if self.hparams.LABEL_SMOOTHING > 0.0:
-            self.__loss_fn = LabelSmoothing(self.hparams.LABEL_SMOOTHING)
-        else:
-            self.__loss_fn = CrossEntropyLoss()
 
     def __dataloader(self, train):
         mean = list(self.hparams.preprocess.MEAN)
