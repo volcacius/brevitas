@@ -9,7 +9,7 @@ from imagenet_classification import QuantImageNetClassification
 from imagenet_classification.hydra_logger import TrainsHydraTestTubeLogger, QueueListenerHandler
 from imagenet_classification.pl_overrides.pl_callbacks import BestModelCheckpoint
 from imagenet_classification.pl_overrides.pl_trainer import CustomDdpTrainer
-from imagenet_classification import SlimmableBitWidth
+from imagenet_classification import SlimmableWeightBitWidth
 
 pl_model = {
     'QuantImageNetClassification': QuantImageNetClassification,
