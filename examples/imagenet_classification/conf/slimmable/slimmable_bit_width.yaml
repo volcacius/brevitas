@@ -1,5 +1,7 @@
 PL_MODEL: SlimmableBitWidth
 
+BIT_WIDTH: 99
+
 slimmable:
   BIT_WIDTH:
   - 2

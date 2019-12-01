@@ -32,6 +32,16 @@ class CrossEntropyLossSoft(nn.Module):
 
 class SlimmableBitWidth(QuantImageNetClassification):
 
+    def configure_model(self):
+        super().configure_model()
+        self.slimmable_bw = {}
+        for n, m in self.model.named_modules():
+            if isinstance(m, BitWidthConst):
+                if m.bit_width == self.hparams.BIT_WIDTH:
+                    self.slimmable_bw[n] = True
+                else:
+                    self.slimmable_bw[n] = False
+
     def configure_loss(self):
         super().configure_loss()
         self.soft_loss = CrossEntropyLossSoft()
@@ -56,7 +66,7 @@ class SlimmableBitWidth(QuantImageNetClassification):
 
     def set_bw(self, bw):
         for n, m in self.model.named_modules():
-            if isinstance(m, BitWidthConst):
+            if n in self.slimmable_bw and self.slimmable_bw[n]:
                 m.bit_width = int(bw)
 
     def training_substep(self, bw, images, target, soft_target, loss_fn):
