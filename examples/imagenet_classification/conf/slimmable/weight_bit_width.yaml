@@ -1,0 +1,10 @@
+PL_MODEL: SlimmableWeightBitWidth
+
+model:
+  WEIGHT_BIT_WIDTH: 99
+
+slimmable:
+  WEIGHT_BIT_WIDTH:
+  - 2
+  - 3
+  - 4

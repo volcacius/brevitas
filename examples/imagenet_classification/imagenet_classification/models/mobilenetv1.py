@@ -40,7 +40,8 @@ class DwsConvBlock(nn.Module):
                  in_channels,
                  out_channels,
                  stride,
-                 bit_width,
+                 weight_bit_width,
+                 act_bit_width,
                  pw_activation_scaling_per_channel=False):
         super(DwsConvBlock, self).__init__()
         self.dw_conv = ConvBlock(
@@ -50,15 +51,15 @@ class DwsConvBlock(nn.Module):
             kernel_size=3,
             padding=1,
             stride=stride,
-            weight_bit_width=bit_width,
-            act_bit_width=bit_width)
+            weight_bit_width=weight_bit_width,
+            act_bit_width=act_bit_width)
         self.pw_conv = ConvBlock(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
             padding=0,
-            weight_bit_width=bit_width,
-            act_bit_width=bit_width,
+            weight_bit_width=weight_bit_width,
+            act_bit_width=act_bit_width,
             activation_scaling_per_channel=pw_activation_scaling_per_channel)
 
     def forward(self, x):
@@ -112,7 +113,9 @@ class MobileNet(nn.Module):
                  first_layer_weight_bit_width,
                  first_layer_padding,
                  first_stage_stride,
-                 bit_width,
+                 weight_bit_width,
+                 act_bit_width,
+                 avg_pool_bit_width,
                  dropout_rate,
                  dropout_samples,
                  in_channels=3,
@@ -130,7 +133,7 @@ class MobileNet(nn.Module):
             padding=first_layer_padding,
             weight_bit_width=first_layer_weight_bit_width,
             activation_scaling_per_channel=True,
-            act_bit_width=bit_width)
+            act_bit_width=act_bit_width)
         self.features.add_module('init_block', init_block)
         in_channels = init_block_channels
         for i, channels_per_stage in enumerate(channels[1:]):
@@ -142,7 +145,8 @@ class MobileNet(nn.Module):
                     in_channels=in_channels,
                     out_channels=out_channels,
                     stride=stride,
-                    bit_width=bit_width,
+                    weight_bit_width=weight_bit_width,
+                    act_bit_width=act_bit_width,
                     pw_activation_scaling_per_channel=pw_activation_scaling_per_channel)
                 stage.add_module('unit{}'.format(j + 1), mod)
                 in_channels = out_channels
@@ -151,13 +155,13 @@ class MobileNet(nn.Module):
             kernel_size=7,
             stride=1,
             signed=False,
-            bit_width=bit_width)
+            bit_width=avg_pool_bit_width)
         self.output = layers.with_defaults.make_quant_linear(
             in_channels,
             num_classes,
             bias=True,
             enable_bias_quant=True,
-            bit_width=bit_width)
+            bit_width=weight_bit_width)
 
     def forward(self, x):
         quant_tensor = self.features(x)
@@ -185,7 +189,9 @@ def quant_mobilenet_v1(hparams):
         first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
         first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
         first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
-        bit_width=hparams.model.BIT_WIDTH,
+        weight_bit_width=hparams.model.WEIGHT_BIT_WIDTH,
+        act_bit_width=hparams.model.ACT_BIT_WIDTH,
+        avg_pool_bit_width=hparams.model.AVG_POOL_BIT_WIDTH,
         dropout_rate=hparams.dropout.RATE,
         dropout_samples=hparams.dropout.SAMPLES)
     return net

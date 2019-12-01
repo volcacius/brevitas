@@ -30,14 +30,14 @@ class CrossEntropyLossSoft(nn.Module):
         return mean(cross_entropy_loss)
 
 
-class SlimmableBitWidth(QuantImageNetClassification):
+class SlimmableWeightBitWidth(QuantImageNetClassification):
 
     def configure_model(self):
         super().configure_model()
         self.slimmable_bw = {}
         for n, m in self.model.named_modules():
             if isinstance(m, BitWidthConst):
-                if m.bit_width == self.hparams.BIT_WIDTH:
+                if m.bit_width == self.hparams.model.WEIGHT_BIT_WIDTH:
                     self.slimmable_bw[n] = True
                 else:
                     self.slimmable_bw[n] = False
@@ -47,7 +47,7 @@ class SlimmableBitWidth(QuantImageNetClassification):
         self.soft_loss = CrossEntropyLossSoft()
 
     def configure_meters(self):
-        for bw in self.hparams.slimmable.BIT_WIDTH:
+        for bw in self.hparams.slimmable.WEIGHT_BIT_WIDTH:
             setattr(self, TRAIN_LOSS_BW_METER.format(bw), AverageMeter())
             setattr(self, TRAIN_TOP1_BW_METER.format(bw), AverageMeter())
             setattr(self, TRAIN_TOP5_BW_METER.format(bw), AverageMeter())
@@ -84,7 +84,7 @@ class SlimmableBitWidth(QuantImageNetClassification):
 
     def training_step(self, batch, batch_idx):
         images, target = batch
-        max_bw = max(self.hparams.slimmable.BIT_WIDTH)
+        max_bw = max(self.hparams.slimmable.WEIGHT_BIT_WIDTH)
         train_loss, output = self.training_substep(max_bw, images, target, None, self.loss_fn)
         soft_target = F.softmax(output, dim=1)
         self.backward(self.use_amp, train_loss, self.trainer.optimizers[0], is_substep=True)
@@ -95,11 +95,11 @@ class SlimmableBitWidth(QuantImageNetClassification):
             BATCH_IDX_LOG_KEY: batch_idx,
             NUM_BATCHES_LOG_KEY: self.trainer.nb_training_batches,
         })
-        for bw in sorted(self.hparams.slimmable.BIT_WIDTH, reverse=True)[1:]:  # exclude max_bw
+        for bw in sorted(self.hparams.slimmable.WEIGHT_BIT_WIDTH, reverse=True)[1:]:  # exclude max_bw
             train_loss, _ = self.training_substep(bw, images, target, soft_target.detach(), self.soft_loss)
             self.backward(self.use_amp, train_loss, self.trainer.optimizers[0], is_substep=True)
 
-        for bw in self.hparams.slimmable.BIT_WIDTH:
+        for bw in sorted(self.hparams.slimmable.WEIGHT_BIT_WIDTH, reverse=True):
             log_dict[TRAIN_LOSS_BW_METER.format(bw)] = getattr(self, TRAIN_LOSS_BW_METER.format(bw))
             log_dict[TRAIN_TOP1_BW_METER.format(bw)] = getattr(self, TRAIN_TOP1_BW_METER.format(bw))
             log_dict[TRAIN_TOP5_BW_METER.format(bw)] = getattr(self, TRAIN_TOP5_BW_METER.format(bw))
@@ -111,7 +111,7 @@ class SlimmableBitWidth(QuantImageNetClassification):
         return output_dict
 
     def on_epoch_start(self):
-        for bw in self.hparams.slimmable.BIT_WIDTH:
+        for bw in self.hparams.slimmable.WEIGHT_BIT_WIDTH:
             getattr(self, TRAIN_LOSS_BW_METER.format(bw)).reset()
             getattr(self, TRAIN_TOP1_BW_METER.format(bw)).reset()
             getattr(self, TRAIN_TOP5_BW_METER.format(bw)).reset()
@@ -136,7 +136,7 @@ class SlimmableBitWidth(QuantImageNetClassification):
                     BATCH_IDX_LOG_KEY: batch_idx,
                     NUM_BATCHES_LOG_KEY: self.trainer.nb_val_batches}
         output_dict = OrderedDict({})
-        for bw in sorted(self.hparams.slimmable.BIT_WIDTH, reverse=True):
+        for bw in sorted(self.hparams.slimmable.WEIGHT_BIT_WIDTH, reverse=True):
             val_loss = self.validation_substep(bw, batch)
             log_dict[VAL_LOSS_BW_METER.format(bw)] = getattr(self, VAL_LOSS_BW_METER.format(bw))
             log_dict[VAL_TOP1_BW_METER.format(bw)] = getattr(self, VAL_TOP1_BW_METER.format(bw))
@@ -148,14 +148,14 @@ class SlimmableBitWidth(QuantImageNetClassification):
     def validation_end(self, outputs):
         log_dict = {LOG_STAGE_LOG_KEY: LogStage.EPOCH,
                     EPOCH_LOG_KEY: self.current_epoch}
-        for bw in sorted(self.hparams.slimmable.BIT_WIDTH, reverse=True):
+        for bw in sorted(self.hparams.slimmable.WEIGHT_BIT_WIDTH, reverse=True):
             log_dict[VAL_LOSS_BW_METER.format(bw)] = getattr(self, VAL_LOSS_BW_METER.format(bw))
             log_dict[VAL_TOP1_BW_METER.format(bw)] = getattr(self, VAL_TOP1_BW_METER.format(bw))
             log_dict[VAL_TOP5_BW_METER.format(bw)] = getattr(self, VAL_TOP5_BW_METER.format(bw))
             log_dict[TRAIN_LOSS_BW_METER.format(bw)] = getattr(self, TRAIN_LOSS_BW_METER.format(bw))
             log_dict[TRAIN_TOP1_BW_METER.format(bw)] = getattr(self, TRAIN_TOP1_BW_METER.format(bw))
             log_dict[TRAIN_TOP5_BW_METER.format(bw)] = getattr(self, TRAIN_TOP5_BW_METER.format(bw))
-        max_bw = max(self.hparams.slimmable.BIT_WIDTH)
+        max_bw = max(self.hparams.slimmable.WEIGHT_BIT_WIDTH)
         result = {'log': log_dict,
                   'val_top1': log_dict[VAL_TOP1_BW_METER.format(max_bw)].avg,
                   'val_loss': log_dict[VAL_LOSS_BW_METER.format(max_bw)].avg}

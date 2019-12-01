@@ -13,7 +13,7 @@ from imagenet_classification import SlimmableBitWidth
 
 pl_model = {
     'QuantImageNetClassification': QuantImageNetClassification,
-    'SlimmableBitWidth': SlimmableBitWidth
+    'SlimmableWeightBitWidth': SlimmableWeightBitWidth
 }
 
 @hydra.main(config_path='conf/train_config.yaml', strict=True)
