@@ -155,8 +155,8 @@ class SlimmableWeightBitWidth(QuantImageNetClassification):
             log_dict[TRAIN_LOSS_BW_METER.format(bw)] = getattr(self, TRAIN_LOSS_BW_METER.format(bw))
             log_dict[TRAIN_TOP1_BW_METER.format(bw)] = getattr(self, TRAIN_TOP1_BW_METER.format(bw))
             log_dict[TRAIN_TOP5_BW_METER.format(bw)] = getattr(self, TRAIN_TOP5_BW_METER.format(bw))
-        max_bw = max(self.hparams.slimmable.WEIGHT_BIT_WIDTH)
+        min_bw = min(self.hparams.slimmable.WEIGHT_BIT_WIDTH)  # use lowerst bw as driving factor for checkpoint
         result = {'log': log_dict,
-                  'val_top1': log_dict[VAL_TOP1_BW_METER.format(max_bw)].avg,
-                  'val_loss': log_dict[VAL_LOSS_BW_METER.format(max_bw)].avg}
+                  'val_top1': log_dict[VAL_TOP1_BW_METER.format(min_bw)].avg,
+                  'val_loss': log_dict[VAL_LOSS_BW_METER.format(min_bw)].avg}
         return result
