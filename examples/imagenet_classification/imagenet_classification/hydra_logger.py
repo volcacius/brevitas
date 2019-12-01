@@ -5,9 +5,14 @@ import flatdict
 from omegaconf import Config
 from pytorch_lightning.logging import TestTubeLogger
 from pytorch_lightning.logging.base import rank_zero_only
-from trains import Task
 
-from .utils import filter_keys, AutoName, IGNORE_VALUE
+from .utils import filter_keys, AutoName, IGNORE_VALUE, MissingOptionalDependency
+
+try:
+    from trains import Task
+except Exception as e:
+    Task = MissingOptionalDependency(e)
+
 
 LOG_STAGE_LOG_KEY = 'log_stage'
 BATCH_IDX_LOG_KEY = 'batch_idx'
@@ -38,7 +43,30 @@ class LogStage(AutoName):
     EPOCH = auto()
 
 
-class HydraTestTubeLogger(TestTubeLogger):
+class TrainsHydraTestTubeLogger(TestTubeLogger):
+
+    def __init__(self,
+                 save_dir,
+                 trains_project_name,
+                 trains_task_name,
+                 trains_logging_enabled,
+                 name="default",
+                 description=None,
+                 debug=False,
+                 version=None,
+                 create_git_tag=False):
+        super(TrainsHydraTestTubeLogger, self).__init__(
+            save_dir,
+            name,
+            description,
+            debug,
+            version,
+            create_git_tag)
+        if trains_logging_enabled:
+            Task.init(project_name=trains_project_name,
+                      task_name=trains_task_name,
+                      auto_connect_arg_parser=False)
+
 
     @rank_zero_only
     def log_hyperparams(self, hparams):
