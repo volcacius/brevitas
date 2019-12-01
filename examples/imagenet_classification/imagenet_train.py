@@ -9,13 +9,18 @@ from imagenet_classification import QuantImageNetClassification
 from imagenet_classification.hydra_logger import TrainsHydraTestTubeLogger, QueueListenerHandler
 from imagenet_classification.pl_overrides.pl_callbacks import BestModelCheckpoint
 from imagenet_classification.pl_overrides.pl_trainer import CustomDdpTrainer
+from imagenet_classification import SlimmableBitWidth
 
+pl_model = {
+    'QuantImageNetClassification': QuantImageNetClassification,
+    'SlimmableBitWidth': SlimmableBitWidth
+}
 
 @hydra.main(config_path='conf/train_config.yaml', strict=True)
 def main(hparams):
     torch.backends.cudnn.benchmark = True
 
-    model = QuantImageNetClassification(hparams)
+    model = pl_model[hparams.PL_MODEL](hparams)
 
     if hparams.IS_DISTRIBUTED:
         distributed_backend = 'ddp'

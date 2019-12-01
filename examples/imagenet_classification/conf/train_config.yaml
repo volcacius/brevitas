@@ -5,6 +5,7 @@ defaults:
   - model: quant_mobilenet_v1_4b
   - optim: rmsproptf
   - scheduler: multistep
+  - slimmable: disabled
 
 log:
   INTERVAL: 2

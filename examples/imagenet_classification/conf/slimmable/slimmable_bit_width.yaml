@@ -1,0 +1,7 @@
+PL_MODEL: SlimmableBitWidth
+
+slimmable:
+  BIT_WIDTH:
+  - 2
+  - 3
+  - 4
