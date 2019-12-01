@@ -1,5 +1,6 @@
 from apex import amp
 import torch.nn.functional as F
+import torch
 from torch import nn, bmm, mean
 
 from collections import OrderedDict
@@ -67,7 +68,7 @@ class SlimmableWeightBitWidth(QuantImageNetClassification):
     def set_bw(self, bw):
         for n, m in self.model.named_modules():
             if n in self.slimmable_bw and self.slimmable_bw[n]:
-                m.bit_width = int(bw)
+                m.bit_width = torch.tensor(float(bw), device=m.bit_width.device)
 
     def training_substep(self, bw, images, target, soft_target, loss_fn):
         self.set_bw(bw)

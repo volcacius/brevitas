@@ -74,7 +74,6 @@ class ZeroLsbTruncBitWidth(torch.jit.ScriptModule):
 
 
 class BitWidthConst(torch.jit.ScriptModule):
-    __constants__ = ['bit_width']
 
     def __init__(self, bit_width_init: int, restrict_bit_width_type: RestrictValueType) -> None:
         super(BitWidthConst, self).__init__()
@@ -82,11 +81,24 @@ class BitWidthConst(torch.jit.ScriptModule):
         if restrict_bit_width_type != RestrictValueType.INT:
             raise Exception("When bit width is predefined, it has to be an INT value.")
 
-        self.bit_width = int(bit_width_init)
+        self.register_buffer('bit_width', torch.tensor(float(bit_width_init)))
 
     @torch.jit.script_method
     def forward(self, zero_hw_sentinel: Tensor) -> Tensor:
-        return self.bit_width + zero_hw_sentinel
+        return self.bit_width
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        super(BitWidthConst, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs)
+        bw_key = prefix + 'bit_width'
+        if bw_key in missing_keys:
+            missing_keys.remove(bw_key)
+
+    def state_dict(self, destination=None, prefix='', keep_vars=False):
+        output_dict = super(BitWidthConst, self).state_dict(destination, prefix, keep_vars)
+        del output_dict[prefix + 'bit_width']
+        return output_dict
 
 
 class BitWidthParameter(torch.jit.ScriptModule):
