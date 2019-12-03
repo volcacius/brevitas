@@ -1,0 +1,19 @@
+model:
+  ARCH: quant_proxylessnas_cpu
+  PRETRAINED_MODEL: https://github.com/osmr/imgclsmob/releases/download/v0.0.304/proxylessnas_cpu-0761-fe9572b1.pth.zip
+  FIRST_LAYER_WEIGHT_BIT_WIDTH: 4
+  DEPTHWISE_BIT_WIDTH: 4
+  BIT_WIDTH: 4
+  FIRST_LAYER_PADDING: 0
+  FIRST_LAYER_STRIDE: 2
+  HADAMARD_CLASSIFIER: False
+
+preprocess:
+  MEAN:
+    - 0.485
+    - 0.456
+    - 0.406
+  STD:
+    - 0.226
+    - 0.226
+    - 0.226

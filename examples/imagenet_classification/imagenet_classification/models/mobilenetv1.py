@@ -73,8 +73,8 @@ class ConvBlock(nn.Module):
                  kernel_size,
                  weight_bit_width,
                  act_bit_width,
+                 padding,
                  stride=1,
-                 padding=0,
                  groups=1,
                  bn_eps=1e-5,
                  activation_scaling_per_channel=False):
@@ -104,8 +104,10 @@ class MobileNet(nn.Module):
 
     def __init__(self,
                  channels,
+                 first_layer_stride,
+                 first_layer_weight_bit_width,
+                 first_layer_padding,
                  first_stage_stride,
-                 first_layer_bit_width,
                  bit_width,
                  dropout_rate,
                  dropout_samples,
@@ -119,8 +121,9 @@ class MobileNet(nn.Module):
         init_block = ConvBlock(in_channels=in_channels,
                                out_channels=init_block_channels,
                                kernel_size=3,
-                               stride=2,
-                               weight_bit_width=first_layer_bit_width,
+                               stride=first_layer_stride,
+                               padding=first_layer_padding,
+                               weight_bit_width=first_layer_weight_bit_width,
                                activation_scaling_per_channel=True,
                                act_bit_width=bit_width)
         self.features.add_module('init_block', init_block)
@@ -172,7 +175,9 @@ def quant_mobilenet_v1(hparams):
 
     net = MobileNet(channels=channels,
                     first_stage_stride=first_stage_stride,
-                    first_layer_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
+                    first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
+                    first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
+                    first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
                     bit_width=hparams.model.BIT_WIDTH,
                     dropout_rate=hparams.dropout.RATE,
                     dropout_samples=hparams.dropout.SAMPLES)
