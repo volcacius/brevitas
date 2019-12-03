@@ -167,8 +167,6 @@ def quant_mobilenet_v1(hparams):
 
     channels = [[32], [64], [128, 128], [256, 256], [512, 512, 512, 512, 512, 512], [1024, 1024]]
     first_stage_stride = False
-    width_scale = float(cfg.get('MODEL', 'WIDTH_SCALE'))
-    bit_width = cfg.getint('QUANT', 'BIT_WIDTH')
 
     if hparams.model.WIDTH_SCALE != 1.0:
         channels = [[int(cij * hparams.model.WIDTH_SCALE) for cij in ci] for ci in channels]

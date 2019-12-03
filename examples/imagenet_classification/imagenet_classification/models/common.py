@@ -18,6 +18,9 @@ ACT_RETURN_QUANT_TENSOR = False
 ACT_PER_CHANNEL_BROADCASTABLE_SHAPE = None
 HARD_TANH_THRESHOLD = 10.0
 
+PADDING = 0
+PADDING_TYPE = qnn.PaddingType.STANDARD
+
 WEIGHT_SCALING_IMPL_TYPE = ScalingImplType.STATS
 WEIGHT_SCALING_PER_OUTPUT_CHANNEL = True
 WEIGHT_SCALING_STATS_OP = StatsOp.MAX
@@ -33,10 +36,11 @@ def make_quant_conv2d(in_channels,
                       out_channels,
                       kernel_size,
                       stride,
-                      padding,
                       groups,
                       bias,
                       bit_width,
+                      padding=PADDING,
+                      padding_type=PADDING_TYPE,
                       enable_bias_quant=ENABLE_BIAS_QUANT,
                       weight_quant_type=QUANT_TYPE,
                       weight_scaling_impl_type=WEIGHT_SCALING_IMPL_TYPE,
@@ -56,6 +60,7 @@ def make_quant_conv2d(in_channels,
                            bias_quant_type=bias_quant_type,
                            compute_output_bit_width=bias and enable_bias_quant,
                            compute_output_scale=bias and enable_bias_quant,
+                           padding_type=padding_type,
                            weight_bit_width=bit_width,
                            weight_quant_type=weight_quant_type,
                            weight_scaling_impl_type=weight_scaling_impl_type,
