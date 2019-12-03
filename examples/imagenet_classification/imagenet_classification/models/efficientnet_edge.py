@@ -139,7 +139,7 @@ class GenericEfficientNet(nn.Module):
         self.conv_head = make_quant_conv2d(in_channels=in_chans,
                                            out_channels=num_features,
                                            kernel_size=1,
-                                           stride=first_layer_stride,
+                                           stride=1,
                                            padding_type=padding_type,
                                            bias=False,
                                            bit_width=bit_width,
@@ -147,7 +147,7 @@ class GenericEfficientNet(nn.Module):
         self.bn2 = nn.BatchNorm2d(num_features, eps=bn_eps)
         self.act2 = make_quant_relu(bit_width=bit_width, return_quant_tensor=True)
         self.global_pool = make_quant_avg_pool(bit_width=bit_width,
-                                               kernel_size=4,
+                                               kernel_size=7,
                                                signed=False,
                                                stride=1)
         self.classifier = make_quant_linear(in_channels=num_features,
