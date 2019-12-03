@@ -20,7 +20,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-__all__ = ['quant_proxylessnas_mobile14']
+__all__ = ['quant_proxylessnas_mobile14',
+           'quant_proxylessnas_cpu',
+           'quant_proxylessnas_gpu',
+           'quant_proxylessnas_mobile']
+
+
+SHORTCUTS = [[0], [0, 1, 1, 1], [0, 1, 1, 1], [0, 1, 1, 1, 0, 1, 1, 1], [0, 1, 1, 1, 0]]
+
 
 import torch.nn as nn
 
@@ -298,13 +305,90 @@ def quant_proxylessnas_mobile14(hparams):
     expansions = [[1], [3, 3, 3, 3], [3, 3, 3, 3], [6, 3, 3, 3, 6, 3, 3, 3], [6, 6, 3, 3, 6]]
     init_block_channels = 48
     final_block_channels = 1792
-    shortcuts = [[0], [0, 1, 1, 1], [0, 1, 1, 1], [0, 1, 1, 1, 0, 1, 1, 1], [0, 1, 1, 1, 0]]
 
     net = ProxylessNAS(channels=channels,
                        init_block_channels=init_block_channels,
                        final_block_channels=final_block_channels,
                        residuals=residuals,
-                       shortcuts=shortcuts,
+                       shortcuts=SHORTCUTS,
+                       kernel_sizes=kernel_sizes,
+                       expansions=expansions,
+                       bit_width=hparams.model.BIT_WIDTH,
+                       first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
+                       depthwise_bit_width=hparams.model.DEPTHWISE_BIT_WIDTH,
+                       hadamard_classifier=hparams.model.HADAMARD_CLASSIFIER,
+                       dropout_rate=hparams.dropout.RATE,
+                       dropout_samples=hparams.dropout.SAMPLES)
+    return net
+
+
+def quant_proxylessnas_cpu(hparams):
+
+    residuals = [[1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 0, 0, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+    channels = [[24], [32, 32, 32, 32], [48, 48, 48, 48], [88, 88, 88, 88, 104, 104, 104, 104],
+                [216, 216, 216, 216, 360]]
+    kernel_sizes = [[3], [3, 3, 3, 3], [3, 3, 3, 5], [3, 3, 3, 3, 5, 3, 3, 3], [5, 5, 5, 3, 5]]
+    expansions = [[1], [6, 3, 3, 3], [6, 3, 3, 3], [6, 3, 3, 3, 6, 3, 3, 3], [6, 3, 3, 3, 6]]
+    init_block_channels = 40
+    final_block_channels = 1432
+
+    net = ProxylessNAS(channels=channels,
+                       init_block_channels=init_block_channels,
+                       final_block_channels=final_block_channels,
+                       residuals=residuals,
+                       shortcuts=SHORTCUTS,
+                       kernel_sizes=kernel_sizes,
+                       expansions=expansions,
+                       bit_width=hparams.model.BIT_WIDTH,
+                       first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
+                       depthwise_bit_width=hparams.model.DEPTHWISE_BIT_WIDTH,
+                       hadamard_classifier=hparams.model.HADAMARD_CLASSIFIER,
+                       dropout_rate=hparams.dropout.RATE,
+                       dropout_samples=hparams.dropout.SAMPLES)
+    return net
+
+
+def quant_proxylessnas_gpu(hparams):
+
+    residuals = [[1], [1, 0, 0, 0], [1, 0, 0, 1], [1, 0, 0, 1, 1, 0, 1, 1], [1, 1, 1, 1, 1]]
+    channels = [[24], [32, 32, 32, 32], [56, 56, 56, 56], [112, 112, 112, 112, 128, 128, 128, 128],
+                [256, 256, 256, 256, 432]]
+    kernel_sizes = [[3], [5, 3, 3, 3], [7, 3, 3, 3], [7, 5, 5, 5, 5, 3, 3, 5], [7, 7, 7, 5, 7]]
+    expansions = [[1], [3, 3, 3, 3], [3, 3, 3, 3], [6, 3, 3, 3, 6, 3, 3, 3], [6, 6, 6, 6, 6]]
+    init_block_channels = 40
+    final_block_channels = 1728
+
+    net = ProxylessNAS(channels=channels,
+                       init_block_channels=init_block_channels,
+                       final_block_channels=final_block_channels,
+                       residuals=residuals,
+                       shortcuts=SHORTCUTS,
+                       kernel_sizes=kernel_sizes,
+                       expansions=expansions,
+                       bit_width=hparams.model.BIT_WIDTH,
+                       first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
+                       depthwise_bit_width=hparams.model.DEPTHWISE_BIT_WIDTH,
+                       hadamard_classifier=hparams.model.HADAMARD_CLASSIFIER,
+                       dropout_rate=hparams.dropout.RATE,
+                       dropout_samples=hparams.dropout.SAMPLES)
+    return net
+
+
+def quant_proxylessnas_mobile(hparams):
+
+    residuals = [[1], [1, 1, 0, 0], [1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+    channels = [[16], [32, 32, 32, 32], [40, 40, 40, 40], [80, 80, 80, 80, 96, 96, 96, 96],
+                [192, 192, 192, 192, 320]]
+    kernel_sizes = [[3], [5, 3, 3, 3], [7, 3, 5, 5], [7, 5, 5, 5, 5, 5, 5, 5], [7, 7, 7, 7, 7]]
+    expansions = [[1], [3, 3, 3, 3], [3, 3, 3, 3], [6, 3, 3, 3, 6, 3, 3, 3], [6, 6, 3, 3, 6]]
+    init_block_channels = 32
+    final_block_channels = 1280
+
+    net = ProxylessNAS(channels=channels,
+                       init_block_channels=init_block_channels,
+                       final_block_channels=final_block_channels,
+                       residuals=residuals,
+                       shortcuts=SHORTCUTS,
                        kernel_sizes=kernel_sizes,
                        expansions=expansions,
                        bit_width=hparams.model.BIT_WIDTH,
