@@ -153,7 +153,7 @@ class GenericEfficientNet(nn.Module):
             bit_width=bit_width,
             groups=1)
         self.bn2 = nn.BatchNorm2d(num_features, eps=bn_eps)
-        self.act2 = layers.with_defaults.make_quant_relu(bit_width=bit_width, return_quant_tensor=False)
+        self.act2 = layers.with_defaults.make_quant_relu(bit_width=bit_width, return_quant_tensor=True)
         self.global_pool = layers.with_defaults.make_quant_avg_pool(
             bit_width=bit_width,
             kernel_size=7,
@@ -163,7 +163,7 @@ class GenericEfficientNet(nn.Module):
             in_channels=num_features,
             out_channels=num_classes,
             bias=True,
-            enable_bias_quant=False,
+            enable_bias_quant=True,
             bit_width=bit_width,
             weight_scaling_per_output_channel=False)
 
