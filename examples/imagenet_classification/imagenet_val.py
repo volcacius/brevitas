@@ -41,7 +41,7 @@ def main(hparams):
 
 
 def print_final_accuracy(top1, top5):
-    print('Avg val_top1 {.4f} val_top5 {:.4f}'.format(top1.avg, top5.avg))
+    print('Avg val_top1 {:.4f} val_top5 {:.4f}'.format(top1.avg, top5.avg))
 
 
 def print_accuracy(i, num_batches, top1, top5):
