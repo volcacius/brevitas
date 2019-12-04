@@ -8,6 +8,7 @@ model:
   FIRST_LAYER_STRIDE: 2
 
 preprocess:
+  RESIZE: BILINEAR
   MEAN:
     - 0.485
     - 0.456

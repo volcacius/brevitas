@@ -9,6 +9,7 @@ model:
   HADAMARD_CLASSIFIER: False
 
 preprocess:
+  RESIZE: BILINEAR
   MEAN:
     - 0.485
     - 0.456
