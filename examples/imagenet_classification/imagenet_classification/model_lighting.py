@@ -210,6 +210,7 @@ class QuantImageNetClassification(LightningModule):
     def __dataloader(self, train):
         mean = list(self.hparams.preprocess.MEAN)
         std = list(self.hparams.preprocess.STD)
+        resize_impl_type = self.hparams.preprocess.RESIZE
 
         def _worker_init_fn(id):
             seed = self.hparams.SEED + self.trainer.proc_rank + id
@@ -224,13 +225,15 @@ class QuantImageNetClassification(LightningModule):
                                                mean=mean,
                                                std=std,
                                                workers=self.hparams.WORKERS,
-                                               worker_init_fn=_worker_init_fn)
+                                               worker_init_fn=_worker_init_fn,
+                                               resize_impl_type=resize_impl_type)
         else:
             dataloader = imagenet_val_loader(batch_size=self.hparams.VAL_BATCH_SIZE,
                                              workers=self.hparams.WORKERS,
                                              data_path=self.hparams.DATADIR,
                                              mean=mean,
-                                             std=std)
+                                             std=std,
+                                             resize_impl_type=resize_impl_type)
         return dataloader
 
     @pl.data_loader
