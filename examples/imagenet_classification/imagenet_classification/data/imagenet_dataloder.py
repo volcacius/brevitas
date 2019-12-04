@@ -23,7 +23,7 @@ def imagenet_train_loader(data_path,
                           resize_impl_type):
     traindir = os.path.join(data_path, 'train')
     transforms_list = [transforms.RandomResizedCrop(IMAGENET_INPUT_SIZE,
-                                                    resize_impl_type_dict[resize_impl_type]),
+                                                    interpolation=resize_impl_type_dict[resize_impl_type]),
                        transforms.RandomHorizontalFlip(),
                        transforms.ToTensor(),
                        transforms.Normalize(mean, std)]
@@ -54,7 +54,7 @@ def imagenet_val_loader(data_path,
                         resize_impl_type):
     valdir = os.path.join(data_path, 'val')
     transforms_list = [transforms.Resize(IMAGENET_INPUT_SIZE + 32,
-                                         resize_impl_type_dict[resize_impl_type]),
+                                         interpolation=resize_impl_type_dict[resize_impl_type]),
                        transforms.CenterCrop(IMAGENET_INPUT_SIZE),
                        transforms.ToTensor(),
                        transforms.Normalize(mean, std)]
