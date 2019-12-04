@@ -35,7 +35,8 @@ def main(hparams):
                                      workers=hparams.WORKERS,
                                      batch_size=hparams.VAL_BATCH_SIZE,
                                      mean=hparams.preprocess.MEAN,
-                                     std=hparams.preprocess.STD)
+                                     std=hparams.preprocess.STD,
+                                     resize_impl_type=hparams.preprocess.RESIZE)
     validate(val_loader, model, hparams.GPU)
     return
 
