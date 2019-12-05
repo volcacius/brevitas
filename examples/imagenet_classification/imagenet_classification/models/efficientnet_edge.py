@@ -16,12 +16,12 @@ limitations under the License.
 """
 
 from brevitas.nn.quant_conv import PaddingType
-from geffnet.efficientnet_builder import decode_arch_def, round_channels, drop_connect, BN_EPS_TF_DEFAULT
+from geffnet.efficientnet_builder import decode_arch_def, round_channels, BN_EPS_TF_DEFAULT
 from geffnet.efficientnet_builder import make_divisible, initialize_weight_default, initialize_weight_goog
 from torch import nn
 
 from . import layers
-from .layers.common import multisample_dropout_classify
+from .layers.common import multisample_dropout_classify, residual_add_drop_connect
 
 
 class GenericEfficientNet(nn.Module):
@@ -308,9 +308,7 @@ class EdgeResidual(nn.Module):
         x = self.bn2(x)
         x = self.shared_hard_tanh(x)
         if self.has_residual:
-            if self.drop_connect_rate > 0.:
-                x = drop_connect(x, self.training, self.drop_connect_rate)
-            x += residual
+            x = residual_add_drop_connect(x, residual, self.training, self.drop_connect_rate)
             x = self.shared_hard_tanh(x)
         return x
 
@@ -397,9 +395,7 @@ class InvertedResidual(nn.Module):
         x = self.shared_hard_tanh(x)
 
         if self.has_residual:
-            if self.drop_connect_rate > 0.:
-                x = drop_connect(x, self.training, self.drop_connect_rate)
-            x += residual
+            x = residual_add_drop_connect(x, residual, self.training, self.drop_connect_rate)
             x = self.shared_hard_tanh(x)
 
         return x
