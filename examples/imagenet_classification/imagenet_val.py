@@ -5,12 +5,11 @@ import hydra
 import torch
 import torch.backends.cudnn as cudnn
 import torch.optim
-
-from imagenet_classification.models import models_dict
-from imagenet_classification.utils import topk_accuracy, state_dict_from_url_or_path, AverageMeter
 from imagenet_classification.data.imagenet_dataloder import imagenet_val_loader
 from imagenet_classification.models import layers
+from imagenet_classification.models import models_dict
 from imagenet_classification.models.layers.make_layer import MakeLayerWithDefaults
+from imagenet_classification.utils import topk_accuracy, state_dict_from_url_or_path, AverageMeter
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Validation')
 
@@ -33,12 +32,15 @@ def main(hparams):
         model = model.cuda(hparams.GPU)
         cudnn.benchmark = True
 
-    val_loader = imagenet_val_loader(data_path=hparams.DATADIR,
-                                     workers=hparams.WORKERS,
-                                     batch_size=hparams.VAL_BATCH_SIZE,
-                                     mean=hparams.preprocess.MEAN,
-                                     std=hparams.preprocess.STD,
-                                     resize_impl_type=hparams.preprocess.RESIZE)
+    val_loader = imagenet_val_loader(
+        data_path=hparams.DATADIR,
+        workers=hparams.WORKERS,
+        batch_size=hparams.VAL_BATCH_SIZE,
+        mean=hparams.preprocess.MEAN,
+        std=hparams.preprocess.STD,
+        resize_ratio=hparams.preprocess.RESIZE_RATIO,
+        crop_size=hparams.preprocess.CROP_SIZE,
+        resize_impl_type=hparams.preprocess.RESIZE_IMPL_TYPE)
     validate(val_loader, model, hparams.GPU)
     return
 

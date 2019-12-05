@@ -2,17 +2,17 @@
 # https://github.com/rwightman/gen-efficientnet-pytorch/blob/master/geffnet/gen_efficientnet.py
 
 model:
-  ARCH: quant_tf_efficientnet_es
-  PRETRAINED_MODEL: https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-weights/tf_efficientnet_es-ca1afbfe.pth
+  ARCH: quant_tf_efficientnet_el
+  PRETRAINED_MODEL: https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-weights/tf_efficientnet_el-5143854e.pth
   FIRST_LAYER_WEIGHT_BIT_WIDTH: 8
   BIT_WIDTH: 8
   FIRST_LAYER_PADDING: 1
   FIRST_LAYER_STRIDE: 2
-  AVG_POOL_KERNEL_SIZE: 7
+  AVG_POOL_KERNEL_SIZE: 10
 
 preprocess:
-  CROP_SIZE: 224
-  RESIZE_RATIO: 0.875
+  CROP_SIZE: 300
+  RESIZE_RATIO: 0.903
   RESIZE_IMPL_TYPE: BICUBIC
   MEAN: # 127 / 255 = 0.4980392156862745
     - 0.4980392156862745

@@ -13,7 +13,6 @@ try:
 except Exception as e:
     Task = MissingOptionalDependency(e)
 
-
 LOG_STAGE_LOG_KEY = 'log_stage'
 BATCH_IDX_LOG_KEY = 'batch_idx'
 NUM_BATCHES_LOG_KEY = 'num_batches'
@@ -45,16 +44,17 @@ class LogStage(AutoName):
 
 class TrainsHydraTestTubeLogger(TestTubeLogger):
 
-    def __init__(self,
-                 save_dir,
-                 trains_project_name,
-                 trains_task_name,
-                 trains_logging_enabled,
-                 name="default",
-                 description=None,
-                 debug=False,
-                 version=None,
-                 create_git_tag=False):
+    def __init__(
+            self,
+            save_dir,
+            trains_project_name,
+            trains_task_name,
+            trains_logging_enabled,
+            name="default",
+            description=None,
+            debug=False,
+            version=None,
+            create_git_tag=False):
         super(TrainsHydraTestTubeLogger, self).__init__(
             save_dir,
             name,
@@ -66,7 +66,6 @@ class TrainsHydraTestTubeLogger(TestTubeLogger):
             Task.init(project_name=trains_project_name,
                       task_name=trains_task_name,
                       auto_connect_arg_parser=False)
-
 
     @rank_zero_only
     def log_hyperparams(self, hparams):
@@ -86,11 +85,11 @@ class TrainsHydraTestTubeLogger(TestTubeLogger):
         class TempStruct:
             def __init__(self, **entries):
                 self.__dict__.update(entries)
+
         self.experiment.argparse(TempStruct(**flatten_hparams))
 
         # Log into tensorboard hparams plugin (supported in Pytorch 1.3)
         if hasattr(self.experiment, 'add_hparams'):
-
             self.experiment.add_hparams(flatten_hparams, metric_dict={})
 
         # Log into trains

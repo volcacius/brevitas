@@ -20,10 +20,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-__all__ = ['quant_proxylessnas_mobile14',
-           'quant_proxylessnas_cpu',
-           'quant_proxylessnas_gpu',
-           'quant_proxylessnas_mobile']
+__all__ = [
+    'quant_proxylessnas_mobile14',
+    'quant_proxylessnas_cpu',
+    'quant_proxylessnas_gpu',
+    'quant_proxylessnas_mobile']
 
 SHORTCUTS = [[0], [0, 1, 1, 1], [0, 1, 1, 1], [0, 1, 1, 1, 0, 1, 1, 1], [0, 1, 1, 1, 0]]
 
@@ -34,20 +35,21 @@ from .layers.common import multisample_dropout_classify
 
 
 class ConvBlock(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride,
-                 padding,
-                 weight_bit_width,
-                 act_bit_width,
-                 act_scaling_per_channel,
-                 bias,
-                 groups=1,
-                 bn_eps=1e-5,
-                 shared_act=None,
-                 return_quant_tensor=False):
+    def __init__(
+            self,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            weight_bit_width,
+            act_bit_width,
+            act_scaling_per_channel,
+            bias,
+            groups=1,
+            bn_eps=1e-5,
+            shared_act=None,
+            return_quant_tensor=False):
         super(ConvBlock, self).__init__()
 
         self.conv = layers.with_defaults.make_quant_conv2d(
@@ -78,16 +80,17 @@ class ConvBlock(nn.Module):
 
 
 class ProxylessBlock(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride,
-                 bn_eps,
-                 expansion,
-                 bit_width,
-                 depthwise_bit_width,
-                 shared_act):
+    def __init__(
+            self,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            bn_eps,
+            expansion,
+            bit_width,
+            depthwise_bit_width,
+            shared_act):
         super(ProxylessBlock, self).__init__()
         self.use_bc = (expansion > 1)
         mid_channels = in_channels * expansion
@@ -142,18 +145,19 @@ class ProxylessBlock(nn.Module):
 
 
 class ProxylessUnit(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride,
-                 bn_eps,
-                 expansion,
-                 residual,
-                 shortcut,
-                 bit_width,
-                 depthwise_bit_width,
-                 shared_act):
+    def __init__(
+            self,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            bn_eps,
+            expansion,
+            residual,
+            shortcut,
+            bit_width,
+            depthwise_bit_width,
+            shared_act):
         super(ProxylessUnit, self).__init__()
         assert residual or shortcut
         assert shared_act is not None
@@ -187,25 +191,26 @@ class ProxylessUnit(nn.Module):
 
 
 class ProxylessNAS(nn.Module):
-    def __init__(self,
-                 channels,
-                 init_block_channels,
-                 final_block_channels,
-                 residuals,
-                 shortcuts,
-                 kernel_sizes,
-                 expansions,
-                 bit_width,
-                 depthwise_bit_width,
-                 first_layer_weight_bit_width,
-                 first_layer_stride,
-                 first_layer_padding,
-                 hadamard_classifier,
-                 dropout_rate,
-                 dropout_samples,
-                 bn_eps=1e-3,
-                 in_channels=3,
-                 num_classes=1000):
+    def __init__(
+            self,
+            channels,
+            init_block_channels,
+            final_block_channels,
+            residuals,
+            shortcuts,
+            kernel_sizes,
+            expansions,
+            bit_width,
+            depthwise_bit_width,
+            first_layer_weight_bit_width,
+            first_layer_stride,
+            first_layer_padding,
+            hadamard_classifier,
+            dropout_rate,
+            dropout_samples,
+            bn_eps=1e-3,
+            in_channels=3,
+            num_classes=1000):
         super(ProxylessNAS, self).__init__()
         self.dropout_rate = dropout_rate
         self.dropout_samples = dropout_samples

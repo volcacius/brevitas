@@ -24,74 +24,6 @@ from . import layers
 from .layers.common import multisample_dropout_classify
 
 
-def quant_tf_efficientnet_es(hparams):
-    """ EfficientNet-Edge Small. Tensorflow compatible variant  """
-    model = generic_efficientnet_edge(
-        hparams,
-        bn_eps=BN_EPS_TF_DEFAULT,
-        padding_type=PaddingType.SAME,
-        channel_multiplier=1.0,
-        depth_multiplier=1.0)
-    return model
-
-
-def quant_tf_efficientnet_em(hparams):
-    """ EfficientNet-Edge-Medium. Tensorflow compatible variant  """
-    model = generic_efficientnet_edge(
-        hparams,
-        bn_eps=BN_EPS_TF_DEFAULT,
-        padding_type=PaddingType.SAME,
-        channel_multiplier=1.0,
-        depth_multiplier=1.1)
-    return model
-
-
-def quant_tf_efficientnet_el(hparams):
-    """ EfficientNet-Edge-Large. Tensorflow compatible variant  """
-    model = generic_efficientnet_edge(
-        hparams,
-        bn_eps=BN_EPS_TF_DEFAULT,
-        padding_type=PaddingType.SAME,
-        channel_multiplier=1.2,
-        depth_multiplier=1.4)
-    return model
-
-
-def generic_efficientnet_edge(hparams,
-                              bn_eps,
-                              padding_type,
-                              channel_multiplier=1.0,
-                              depth_multiplier=1.0):
-    arch_def = [
-        # NOTE `fc` is present to override a mismatch between stem channels and in chs not
-        # present in other models
-        ['er_r1_k3_s1_e4_c24_fc24_noskip'],
-        ['er_r2_k3_s2_e8_c32'],
-        ['er_r4_k3_s2_e8_c48'],
-        ['ir_r5_k5_s2_e8_c96'],
-        ['ir_r4_k5_s1_e8_c144'],
-        ['ir_r2_k5_s2_e8_c192'],
-    ]
-    block_args = decode_arch_def(arch_def, depth_multiplier)
-    num_features = round_channels(1280, channel_multiplier, 8, None)
-    stem_size = 32
-    channel_multiplier = channel_multiplier
-    model = GenericEfficientNet(
-        block_args,
-        bn_eps=bn_eps,
-        padding_type=padding_type,
-        num_features=num_features,
-        channel_multiplier=channel_multiplier,
-        stem_size=stem_size,
-        first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
-        first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
-        first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
-        bit_width=hparams.model.BIT_WIDTH,
-        dropout_rate=hparams.dropout.RATE,
-        dropout_samples=hparams.dropout.SAMPLES)
-    return model
-
-
 class GenericEfficientNet(nn.Module):
 
     def __init__(self,
@@ -101,11 +33,12 @@ class GenericEfficientNet(nn.Module):
                  first_layer_padding,
                  bit_width,
                  bn_eps,
+                 avg_pool_kernel_size,
+                 channel_multiplier,
                  num_classes=1000,
                  in_chans=3,
                  stem_size=32,
                  num_features=1280,
-                 channel_multiplier=1.0,
                  channel_divisor=8,
                  channel_min=None,
                  padding_type=None,
@@ -156,7 +89,7 @@ class GenericEfficientNet(nn.Module):
         self.act2 = layers.with_defaults.make_quant_relu(bit_width=bit_width, return_quant_tensor=True)
         self.global_pool = layers.with_defaults.make_quant_avg_pool(
             bit_width=bit_width,
-            kernel_size=7,
+            kernel_size=avg_pool_kernel_size,
             signed=False,
             stride=1)
         self.classifier = layers.with_defaults.make_quant_linear(
@@ -278,7 +211,7 @@ class EfficientNetBuilder:
                 has_residual=ba['has_residual'])
         else:
             raise Exception('Uknkown block type {} while building model.'.format(bt))
-        self.in_chs = ba['out_chs']  # update in_chs for arg of next block
+        self.in_chs = out_chs  # update in_chs for arg of next block
         return block
 
     def _make_stack(self, stack_args):
@@ -470,3 +403,72 @@ class InvertedResidual(nn.Module):
             x = self.shared_hard_tanh(x)
 
         return x
+
+
+def generic_efficientnet_edge(hparams,
+                              bn_eps,
+                              padding_type,
+                              channel_multiplier,
+                              depth_multiplier):
+    arch_def = [
+        # NOTE `fc` is present to override a mismatch between stem channels and in chs not
+        # present in other models
+        ['er_r1_k3_s1_e4_c24_fc24_noskip'],
+        ['er_r2_k3_s2_e8_c32'],
+        ['er_r4_k3_s2_e8_c48'],
+        ['ir_r5_k5_s2_e8_c96'],
+        ['ir_r4_k5_s1_e8_c144'],
+        ['ir_r2_k5_s2_e8_c192'],
+    ]
+    block_args = decode_arch_def(arch_def, depth_multiplier)
+    num_features = round_channels(1280, channel_multiplier, 8, None)
+    stem_size = 32
+    channel_multiplier = channel_multiplier
+    model = GenericEfficientNet(
+        block_args,
+        bn_eps=bn_eps,
+        padding_type=padding_type,
+        num_features=num_features,
+        channel_multiplier=channel_multiplier,
+        stem_size=stem_size,
+        first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
+        first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
+        first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
+        bit_width=hparams.model.BIT_WIDTH,
+        dropout_rate=hparams.dropout.RATE,
+        dropout_samples=hparams.dropout.SAMPLES,
+        avg_pool_kernel_size=hparams.model.AVG_POOL_KERNEL_SIZE)
+    return model
+
+
+def quant_tf_efficientnet_es(hparams):
+    """ EfficientNet-Edge Small. Tensorflow compatible variant  """
+    model = generic_efficientnet_edge(
+        hparams,
+        bn_eps=BN_EPS_TF_DEFAULT,
+        padding_type=PaddingType.SAME,
+        channel_multiplier=1.0,
+        depth_multiplier=1.0)
+    return model
+
+
+def quant_tf_efficientnet_em(hparams):
+    """ EfficientNet-Edge-Medium. Tensorflow compatible variant  """
+    model = generic_efficientnet_edge(
+        hparams,
+        bn_eps=BN_EPS_TF_DEFAULT,
+        padding_type=PaddingType.SAME,
+        channel_multiplier=1.0,
+        depth_multiplier=1.1)
+    return model
+
+
+def quant_tf_efficientnet_el(hparams):
+    """ EfficientNet-Edge-Large. Tensorflow compatible variant  """
+    model = generic_efficientnet_edge(
+        hparams,
+        bn_eps=BN_EPS_TF_DEFAULT,
+        padding_type=PaddingType.SAME,
+        channel_multiplier=1.2,
+        depth_multiplier=1.4)
+    return model

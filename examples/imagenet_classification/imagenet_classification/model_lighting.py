@@ -3,21 +3,21 @@ Based on example:
 https://github.com/williamFalcon/pytorch-lightning/blob/master/pl_examples/full_examples/imagenet/imagenet_example.py
 """
 
-from collections import OrderedDict
 import random
+from collections import OrderedDict
+from functools import partial
 
-from .utils import MissingOptionalDependency
-
+import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
-import numpy as np
-from functools import partial
+from apex.optimizers import FusedAdam
 from pytorch_lightning.root_module.root_module import LightningModule
 from torch.nn import CrossEntropyLoss
 from torch.optim import SGD
-from apex.optimizers import FusedAdam
 from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
+
+from .utils import MissingOptionalDependency
 
 try:
     from apex.optimizers import FusedNovoGrad
@@ -32,13 +32,14 @@ from .smoothing import LabelSmoothing
 from .hydra_logger import *
 from .utils import filter_keys, state_dict_from_url_or_path, topk_accuracy, AverageMeter, lowercase_keys
 
+optim_impl = {
+    'SGD': SGD,
+    'ADAM': FusedAdam,
+    'NOVOGRAD': FusedNovoGrad}
 
-optim_impl = {'SGD': SGD,
-              'ADAM': FusedAdam,
-              'NOVOGRAD': FusedNovoGrad}
-
-scheduler_impl = {'COSINE': lambda t_max: partial(CosineAnnealingLR, T_max=t_max), # normalize case
-                  'MULTISTEP' : MultiStepLR}
+scheduler_impl = {
+    'COSINE': lambda t_max: partial(CosineAnnealingLR, T_max=t_max),  # normalize case
+    'MULTISTEP': MultiStepLR}
 
 
 class QuantImageNetClassification(LightningModule):
@@ -70,10 +71,13 @@ class QuantImageNetClassification(LightningModule):
 
     def configure_optimizers(self):
         no_wd_params, wd_params = filter_keys(self.named_parameters(), self.hparams.NO_WD)
-        optim_dict = [{'params': no_wd_params, 'weight_decay': 0.0},
-                      {'params': wd_params, 'weight_decay': self.hparams.optim_conf.WEIGHT_DECAY}]
-        optimizer = optim_impl[self.hparams.OPTIMIZER](optim_dict, **lowercase_keys(self.hparams.optim_conf))
-        scheduler = scheduler_impl[self.hparams.SCHEDULER](optimizer, **lowercase_keys(self.hparams.scheduler_conf))
+        optim_dict = [
+            {'params': no_wd_params, 'weight_decay': 0.0},
+            {'params': wd_params, 'weight_decay': self.hparams.optim_conf.WEIGHT_DECAY}]
+        optimizer = optim_impl[self.hparams.OPTIMIZER](
+            optim_dict, **lowercase_keys(self.hparams.optim_conf))
+        scheduler = scheduler_impl[self.hparams.SCHEDULER](
+            optimizer, **lowercase_keys(self.hparams.scheduler_conf))
         return [optimizer], [scheduler]
 
     def configure_loss(self):
@@ -104,7 +108,8 @@ class QuantImageNetClassification(LightningModule):
         except KeyError:
             return
         if pretrained_model is not None:
-            self.model.load_state_dict(state_dict_from_url_or_path((pretrained_model)), strict=True)
+            self.model.load_state_dict(
+                state_dict_from_url_or_path((pretrained_model)), strict=True)
             logging.info('Loaded .pth at: {}'.format(pretrained_model))
 
     def on_save_checkpoint(self, checkpoint):
@@ -124,7 +129,13 @@ class QuantImageNetClassification(LightningModule):
             loss = self.__loss_fn(output, target)
             return loss, output
 
-    def optimizer_step(self, current_epoch, batch_nb, optimizer, optimizer_i, second_order_closure=None):
+    def optimizer_step(
+            self,
+            current_epoch,
+            batch_nb,
+            optimizer,
+            optimizer_i,
+            second_order_closure=None):
 
         # LR warmup batch-by-batch
         if current_epoch < self.hparams.WARMUP_EPOCHS:
@@ -154,12 +165,10 @@ class QuantImageNetClassification(LightningModule):
             NUM_BATCHES_LOG_KEY: self.trainer.nb_training_batches,
             TRAIN_LOSS_METER: self.train_loss_meter,
             TRAIN_TOP1_METER: self.train_top1_meter,
-            TRAIN_TOP5_METER: self.train_top5_meter
-        })
+            TRAIN_TOP5_METER: self.train_top5_meter})
         output = OrderedDict({
             'loss': train_loss,
-            'log': log_dict
-        })
+            'log': log_dict})
         return output
 
     def on_epoch_start(self):
@@ -180,25 +189,27 @@ class QuantImageNetClassification(LightningModule):
         self.val_top1_meter.update(val_top1.detach(), images.size(0))
         self.val_top5_meter.update(val_top5.detach(), images.size(0))
 
-        log_dict = {LOG_STAGE_LOG_KEY: LogStage.VAL_BATCH,
-                    EPOCH_LOG_KEY: self.current_epoch,
-                    BATCH_IDX_LOG_KEY: batch_idx,
-                    NUM_BATCHES_LOG_KEY: self.trainer.nb_val_batches,
-                    VAL_LOSS_METER: self.val_loss_meter,
-                    VAL_TOP1_METER: self.val_top1_meter,
-                    VAL_TOP5_METER: self.val_top5_meter}
+        log_dict = {
+            LOG_STAGE_LOG_KEY: LogStage.VAL_BATCH,
+            EPOCH_LOG_KEY: self.current_epoch,
+            BATCH_IDX_LOG_KEY: batch_idx,
+            NUM_BATCHES_LOG_KEY: self.trainer.nb_val_batches,
+            VAL_LOSS_METER: self.val_loss_meter,
+            VAL_TOP1_METER: self.val_top1_meter,
+            VAL_TOP5_METER: self.val_top5_meter}
         self.logger.log_metrics(log_dict)
         return val_loss
 
     def validation_end(self, outputs):
-        log_dict = {LOG_STAGE_LOG_KEY: LogStage.EPOCH,
-                    EPOCH_LOG_KEY: self.current_epoch,
-                    TRAIN_LOSS_METER: self.train_loss_meter,
-                    TRAIN_TOP1_METER: self.train_top1_meter,
-                    TRAIN_TOP5_METER: self.train_top5_meter,
-                    VAL_LOSS_METER: self.val_loss_meter,
-                    VAL_TOP1_METER: self.val_top1_meter,
-                    VAL_TOP5_METER: self.val_top5_meter}
+        log_dict = {
+            LOG_STAGE_LOG_KEY: LogStage.EPOCH,
+            EPOCH_LOG_KEY: self.current_epoch,
+            TRAIN_LOSS_METER: self.train_loss_meter,
+            TRAIN_TOP1_METER: self.train_top1_meter,
+            TRAIN_TOP5_METER: self.train_top5_meter,
+            VAL_LOSS_METER: self.val_loss_meter,
+            VAL_TOP1_METER: self.val_top1_meter,
+            VAL_TOP5_METER: self.val_top5_meter}
 
         result = {'log': log_dict,
                   'val_top1': log_dict[VAL_TOP1_METER].avg,
@@ -214,7 +225,6 @@ class QuantImageNetClassification(LightningModule):
     def __dataloader(self, train):
         mean = list(self.hparams.preprocess.MEAN)
         std = list(self.hparams.preprocess.STD)
-        resize_impl_type = self.hparams.preprocess.RESIZE
 
         def _worker_init_fn(id):
             seed = self.hparams.SEED + self.trainer.proc_rank + id
@@ -223,21 +233,26 @@ class QuantImageNetClassification(LightningModule):
             random.seed(seed)
 
         if train:
-            dataloader = imagenet_train_loader(batch_size=self.hparams.TRAIN_BATCH_SIZE,
-                                               data_path=self.hparams.DATADIR,
-                                               is_distributed=self.hparams.IS_DISTRIBUTED,
-                                               mean=mean,
-                                               std=std,
-                                               workers=self.hparams.WORKERS,
-                                               worker_init_fn=_worker_init_fn,
-                                               resize_impl_type=resize_impl_type)
+            dataloader = imagenet_train_loader(
+                batch_size=self.hparams.TRAIN_BATCH_SIZE,
+                data_path=self.hparams.DATADIR,
+                is_distributed=self.hparams.IS_DISTRIBUTED,
+                mean=mean,
+                std=std,
+                workers=self.hparams.WORKERS,
+                worker_init_fn=_worker_init_fn,
+                crop_size=self.hparams.preprocess.CROP_SIZE,
+                resize_impl_type=self.hparams.preprocess.RESIZE_IMPL_TYPE)
         else:
-            dataloader = imagenet_val_loader(batch_size=self.hparams.VAL_BATCH_SIZE,
-                                             workers=self.hparams.WORKERS,
-                                             data_path=self.hparams.DATADIR,
-                                             mean=mean,
-                                             std=std,
-                                             resize_impl_type=resize_impl_type)
+            dataloader = imagenet_val_loader(
+                batch_size=self.hparams.VAL_BATCH_SIZE,
+                workers=self.hparams.WORKERS,
+                data_path=self.hparams.DATADIR,
+                mean=mean,
+                std=std,
+                resize_ratio=self.hparams.preprocess.RESIZE_RATIO,
+                crop_size=self.hparams.preprocess.CROP_SIZE,
+                resize_impl_type=self.hparams.preprocess.RESIZE_IMPL_TYPE)
         return dataloader
 
     @pl.data_loader

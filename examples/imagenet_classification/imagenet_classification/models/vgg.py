@@ -39,8 +39,7 @@ from . import layers
 
 __all__ = [
     'QuantVGG', 'quant_vgg11', 'quant_vgg11_bn', 'quant_vgg13', 'quant_vgg13_bn', 'quant_vgg16', 'quant_vgg16_bn',
-    'quant_vgg19_bn', 'quant_vgg19',
-]
+    'quant_vgg19_bn', 'quant_vgg19']
 
 
 class QuantVGG(nn.Module):
@@ -89,9 +88,16 @@ def make_layers(cfg, batch_norm, bit_width):
         if v == 'M':
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
         else:
-            conv2d = make_quant_conv2d(in_channels, v, kernel_size=3, stride=1, padding=1, groups=1,
-                                       bias=not batch_norm, bit_width=bit_width)
-            act = make_quant_relu(bit_width)
+            conv2d = layers.with_defaults.make_quant_conv2d(
+                in_channels,
+                v,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                groups=1,
+                bias=not batch_norm,
+                bit_width=bit_width)
+            act = layers.with_defaults.make_quant_relu(bit_width)
             if batch_norm:
                 layers += [conv2d, nn.BatchNorm2d(v), act]
             else:

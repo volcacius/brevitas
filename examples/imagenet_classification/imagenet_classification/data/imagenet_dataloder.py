@@ -1,16 +1,16 @@
 import os
+import math
 
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+from PIL import Image
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from PIL import Image
 
 resize_impl_type_dict = {'BILINEAR': Image.BILINEAR,
                          'BICUBIC': Image.BICUBIC}
 
 IMAGENET_NUM_CLASSES = 1000
-IMAGENET_INPUT_SIZE = 224
 
 
 def imagenet_train_loader(data_path,
@@ -20,9 +20,10 @@ def imagenet_train_loader(data_path,
                           worker_init_fn,
                           mean,
                           std,
+                          crop_size,
                           resize_impl_type):
     traindir = os.path.join(data_path, 'train')
-    transforms_list = [transforms.RandomResizedCrop(IMAGENET_INPUT_SIZE,
+    transforms_list = [transforms.RandomResizedCrop(crop_size,
                                                     interpolation=resize_impl_type_dict[resize_impl_type]),
                        transforms.RandomHorizontalFlip(),
                        transforms.ToTensor(),
@@ -51,11 +52,14 @@ def imagenet_val_loader(data_path,
                         workers,
                         mean,
                         std,
+                        crop_size,
+                        resize_ratio,
                         resize_impl_type):
     valdir = os.path.join(data_path, 'val')
-    transforms_list = [transforms.Resize(IMAGENET_INPUT_SIZE + 32,
+    resize_to = int(math.floor(crop_size / resize_ratio))
+    transforms_list = [transforms.Resize(resize_to,
                                          interpolation=resize_impl_type_dict[resize_impl_type]),
-                       transforms.CenterCrop(IMAGENET_INPUT_SIZE),
+                       transforms.CenterCrop(crop_size),
                        transforms.ToTensor(),
                        transforms.Normalize(mean, std)]
     transforms_composed = transforms.Compose(transforms_list)
