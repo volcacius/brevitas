@@ -212,6 +212,8 @@ class EfficientNetBuilder:
         self.bn_eps = bn_eps
         self.drop_connect_rate = drop_connect_rate
         self.bit_width = bit_width
+        self.shared_hard_tanh = None
+
 
         # updated during build
         self.in_chs = None
@@ -225,10 +227,18 @@ class EfficientNetBuilder:
             self.channel_divisor,
             self.channel_min)
 
+    def make_shared_hard_tanh(self):
+        return layers.with_defaults.make_quant_hard_tanh(
+            bit_width=self.bit_width,
+            return_quant_tensor=True)
+
     def _make_block(self, ba):
         bt = ba.pop('block_type')
         in_chs = self.in_chs
         out_chs = self._round_channels(ba['out_chs'])
+        ba['has_residual'] = (in_chs == out_chs and ba['stride'] == 1) and not ba['noskip']
+        if not ba['has_residual']:
+            self.shared_hard_tanh = self.make_shared_hard_tanh()
         # This is a hack to work around mismatch in origin impl input filters for EdgeTPU
         if 'fake_in_chs' in ba and ba['fake_in_chs']:
             fake_in_chs = self._round_channels(ba['fake_in_chs'])
@@ -243,12 +253,13 @@ class EfficientNetBuilder:
                 bn_eps=self.bn_eps,
                 padding_type=self.padding_type,
                 drop_connect_rate=drop_connect_rate,
+                shared_hard_tanh=self.shared_hard_tanh,
                 exp_kernel_size=ba['exp_kernel_size'],
                 dw_kernel_size=ba['dw_kernel_size'],
                 pw_kernel_size=ba['pw_kernel_size'],
                 exp_ratio=ba['exp_ratio'],
                 stride=ba['stride'],
-                noskip=ba['noskip'])
+                has_residual=ba['has_residual'])
         elif bt == 'er':
             drop_connect_rate = self.drop_connect_rate * self.block_idx / self.block_count
             block = EdgeResidual(
@@ -259,11 +270,12 @@ class EfficientNetBuilder:
                 bn_eps=self.bn_eps,
                 padding_type=self.padding_type,
                 drop_connect_rate=drop_connect_rate,
+                shared_hard_tanh=self.shared_hard_tanh,
                 exp_kernel_size=ba['exp_kernel_size'],
                 pw_kernel_size=ba['pw_kernel_size'],
                 exp_ratio=ba['exp_ratio'],
                 stride=ba['stride'],
-                noskip=ba['noskip'])
+                has_residual=ba['has_residual'])
         else:
             raise Exception('Uknkown block type {} while building model.'.format(bt))
         self.in_chs = ba['out_chs']  # update in_chs for arg of next block
@@ -315,13 +327,15 @@ class EdgeResidual(nn.Module):
                  exp_ratio,
                  fake_in_chs,
                  stride,
-                 noskip,
+                 has_residual,
                  pw_kernel_size,
-                 drop_connect_rate):
+                 drop_connect_rate,
+                 shared_hard_tanh):
         super(EdgeResidual, self).__init__()
         mid_chs = make_divisible(fake_in_chs * exp_ratio) if fake_in_chs > 0 else make_divisible(in_chs * exp_ratio)
-        self.has_residual = (in_chs == out_chs and stride == 1) and not noskip
+        self.has_residual = has_residual
         self.drop_connect_rate = drop_connect_rate
+        self.shared_hard_tanh = shared_hard_tanh
 
         # Expansion convolution
         self.conv_exp = layers.with_defaults.make_quant_conv2d(
@@ -359,12 +373,12 @@ class EdgeResidual(nn.Module):
         # Point-wise linear projection
         x = self.conv_pwl(x)
         x = self.bn2(x)
-
+        x = self.shared_hard_tanh(x)
         if self.has_residual:
             if self.drop_connect_rate > 0.:
                 x = drop_connect(x, self.training, self.drop_connect_rate)
             x += residual
-
+            x = self.shared_hard_tanh(x)
         return x
 
 
@@ -378,15 +392,17 @@ class InvertedResidual(nn.Module):
                  bit_width,
                  dw_kernel_size,
                  stride,
-                 noskip,
+                 has_residual,
                  exp_ratio,
                  exp_kernel_size,
                  pw_kernel_size,
-                 drop_connect_rate):
+                 drop_connect_rate,
+                 shared_hard_tanh):
         super(InvertedResidual, self).__init__()
         mid_chs: int = make_divisible(in_chs * exp_ratio)
-        self.has_residual = (in_chs == out_chs and stride == 1) and not noskip
+        self.has_residual = has_residual
         self.drop_connect_rate = drop_connect_rate
+        self.shared_hard_tanh = shared_hard_tanh
 
         # Point-wise expansion
         self.conv_pw = layers.with_defaults.make_quant_conv2d(
@@ -445,9 +461,12 @@ class InvertedResidual(nn.Module):
         # Point-wise linear projection
         x = self.conv_pwl(x)
         x = self.bn3(x)
+        x = self.shared_hard_tanh(x)
 
         if self.has_residual:
             if self.drop_connect_rate > 0.:
                 x = drop_connect(x, self.training, self.drop_connect_rate)
             x += residual
+            x = self.shared_hard_tanh(x)
+
         return x
