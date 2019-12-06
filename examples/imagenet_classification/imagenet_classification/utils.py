@@ -90,4 +90,4 @@ class MissingOptionalDependency:
         self.e = e
 
     def __call__(self, *args, **kwargs):
-        raise Exception('Missing optional dependency, {}'.format(self.e))
+        raise self.e

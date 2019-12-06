@@ -8,7 +8,6 @@ from imagenet_classification import QuantImageNetClassification
 from imagenet_classification.hydra_logger import TrainsHydraTestTubeLogger
 from imagenet_classification.pl_overrides.pl_callbacks import BestModelCheckpoint
 from imagenet_classification.pl_overrides.pl_trainer import CustomDdpTrainer
-from trains import Task
 
 
 @hydra.main(config_path='conf/train_config.yaml', strict=True)
