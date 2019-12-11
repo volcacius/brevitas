@@ -1,0 +1,6 @@
+SCHEDULER: MULTISTEP
+scheduler_conf:
+  GAMMA: 0.1
+  MILESTONES:
+    - 10
+    - 20

@@ -2,12 +2,31 @@ defaults:
   - misc
   - layers_defaults
   - model: quant_mobilenet_v1_4b
-  - trainer: train_quant_mobilenet_v1_4b
+  - optim: rmsproptf
+  - scheduler: multistep
 
 log:
   INTERVAL: 2
   SAVE_INTERVAL: 10
   TRAINS_LOGGING: False
+
+TRAIN_BATCH_SIZE: 256
+IS_DISTRIBUTED: False
+MIXED_PRECISION: False
+EPOCHS: 30
+
+LABEL_SMOOTHING: 0.1
+
+WARMUP_EPOCHS: 0
+
+dropout:
+  RATE: 0.2
+  SAMPLES: 1
+
+NO_WD:
+  - 'bn'
+  - 'bias'
+  - 'scaling'
 
 EVALUATE_ONLY: False
 

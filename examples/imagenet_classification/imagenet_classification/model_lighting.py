@@ -24,6 +24,11 @@ try:
 except Exception as e:
     FusedNovoGrad = MissingOptionalDependency(e)
 
+try:
+    from timm.optim.rmsprop_tf import RMSpropTF
+except Exception as e:
+    RMSpropTF = MissingOptionalDependency(e)
+
 from .data.imagenet_dataloder import imagenet_train_loader, imagenet_val_loader
 from .models import models_dict
 from .models.layers.make_layer import MakeLayerWithDefaults
@@ -35,7 +40,8 @@ from .utils import filter_keys, state_dict_from_url_or_path, topk_accuracy, Aver
 optim_impl = {
     'SGD': SGD,
     'ADAM': FusedAdam,
-    'NOVOGRAD': FusedNovoGrad}
+    'NOVOGRAD': FusedNovoGrad,
+    'RMSPROPTF': RMSpropTF}
 
 scheduler_impl = {
     'COSINE': lambda t_max: partial(CosineAnnealingLR, T_max=t_max),  # normalize case
@@ -211,9 +217,10 @@ class QuantImageNetClassification(LightningModule):
             VAL_TOP1_METER: self.val_top1_meter,
             VAL_TOP5_METER: self.val_top5_meter}
 
-        result = {'log': log_dict,
-                  'val_top1': log_dict[VAL_TOP1_METER].avg,
-                  'val_loss': log_dict[VAL_LOSS_METER].avg}
+        result = {
+            'log': log_dict,
+            'val_top1': log_dict[VAL_TOP1_METER].avg,
+            'val_loss': log_dict[VAL_LOSS_METER].avg}
         return result
 
     def test_step(self, batch, batch_idx):
