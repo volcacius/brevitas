@@ -36,7 +36,7 @@ def drop_connect(inputs, training: bool = False, drop_connect_rate: float = 0.):
 def multisample_dropout_classify(x, classifier, samples, rate, training):
     x, scale, bit_width = x
     x = x.view(x.size(0), -1)
-    if training and samples == 0:
+    if training and samples == 1:
         out = F.dropout(x, p=rate)
         out = classifier(pack_quant_tensor(out, scale, bit_width))
         return out
