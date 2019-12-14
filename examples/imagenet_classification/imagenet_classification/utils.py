@@ -54,7 +54,7 @@ def state_dict_from_url_or_path(pretrained_model):
         if pretrained_model.lower().endswith('.pth'):
             state_dict = torch.load(pretrained_model, map_location='cpu')
         else:
-            state_dict = torch.load(pretrained_model['state_dict'], map_location='cpu')
+            state_dict = torch.load(pretrained_model, map_location='cpu')['state_dict']
     elif urlparse(pretrained_model).netloc:  # validates the url
         state_dict = torch.hub.load_state_dict_from_url(pretrained_model, map_location='cpu')
     else:
