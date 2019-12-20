@@ -24,6 +24,7 @@ layers_defaults:
     RETURN_QUANT_TENSOR: False
     PER_CHANNEL_BROADCASTABLE_SHAPE:
     SCALING_MIN_VAL: 2e-16
+    SCALING_STATS_OP: MAX
 
   quant_relu:
     MAX_VAL: 6.0
