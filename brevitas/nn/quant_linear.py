@@ -113,6 +113,7 @@ class QuantLinear(QuantLayer, Linear):
 
         self.per_elem_ops = 2 * in_features
         self.weight_reg = WeightReg()
+        self.weight_scaling_stats_op = weight_scaling_stats_op
 
         if weight_quant_override is not None:
             self.weight_quant = weight_quant_override

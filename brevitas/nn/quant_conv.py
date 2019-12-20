@@ -136,6 +136,7 @@ class QuantConv2d(QuantLayer, Conv2d):
         self.per_elem_ops = 2 * self.kernel_size[0] * self.kernel_size[1] * (in_channels // groups)
         self.padding_type = padding_type
         self.weight_reg = WeightReg()
+        self.weight_scaling_stats_op = weight_scaling_stats_op
 
         if weight_quant_override is not None:
             self.weight_quant = weight_quant_override
