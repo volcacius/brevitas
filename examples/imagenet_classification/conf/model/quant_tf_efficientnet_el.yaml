@@ -11,6 +11,7 @@ model:
   AVG_POOL_KERNEL_SIZE: 10
   MERGE_BN: True
   DW_BIT_WIDTH: 8
+  DW_SCALING_PER_CHANNEL: True
   SCALING_PER_CHANNEL: True
 
 preprocess:

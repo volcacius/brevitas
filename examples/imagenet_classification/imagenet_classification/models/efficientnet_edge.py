@@ -33,6 +33,7 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             first_layer_stride,
             first_layer_padding,
             scaling_per_channel,
+            dw_scaling_per_channel,
             merge_bn,
             bit_width,
             dw_bit_width,
@@ -82,6 +83,7 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             bit_width=bit_width,
             dw_bit_width=dw_bit_width,
             scaling_per_channel=scaling_per_channel,
+            dw_scaling_per_channel=dw_scaling_per_channel,
             merge_bn=merge_bn)
         self.blocks = nn.Sequential(*builder(in_chans, block_args))
         in_chans = builder.in_chs
@@ -151,6 +153,7 @@ class EfficientNetBuilder:
             dw_bit_width,
             padding_type,
             scaling_per_channel,
+            dw_scaling_per_channel,
             merge_bn,
             bn_eps,
             channel_multiplier,
@@ -167,6 +170,7 @@ class EfficientNetBuilder:
         self.dw_bit_width = dw_bit_width
         self.merge_bn = merge_bn
         self.scaling_per_channel = scaling_per_channel
+        self.dw_scaling_per_channel = dw_scaling_per_channel
         self.shared_hard_tanh = None
 
         # updated during build
@@ -209,7 +213,8 @@ class EfficientNetBuilder:
                 padding_type=self.padding_type,
                 drop_connect_rate=drop_connect_rate,
                 shared_hard_tanh=self.shared_hard_tanh,
-                scaling_per_channel=self.scaling_per_channel,
+                pw_scaling_per_channel=self.scaling_per_channel,
+                dw_scaling_per_channel=self.dw_scaling_per_channel,
                 merge_bn=self.merge_bn,
                 exp_kernel_size=ba['exp_kernel_size'],
                 dw_kernel_size=ba['dw_kernel_size'],
@@ -366,7 +371,8 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             exp_ratio,
             exp_kernel_size,
             pw_kernel_size,
-            scaling_per_channel,
+            pw_scaling_per_channel,
+            dw_scaling_per_channel,
             drop_connect_rate,
             shared_hard_tanh,
             merge_bn):
@@ -386,13 +392,13 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             padding_type=padding_type,
             bias=False,
             bit_width=bit_width,
-            weight_scaling_per_output_channel=scaling_per_channel,
+            weight_scaling_per_output_channel=pw_scaling_per_channel,
             stride=1,
             groups=1)
         self.bn1 = nn.Identity() if merge_bn else nn.BatchNorm2d(mid_chs, eps=bn_eps)
         self.act1 = layers.with_defaults.make_quant_relu(
             bit_width=dw_bit_width,  # is input to dw conv
-            scaling_per_channel=scaling_per_channel,
+            scaling_per_channel=dw_scaling_per_channel,
             per_channel_broadcastable_shape=(1, mid_chs, 1, 1))
 
         # Depth-wise convolution
@@ -405,7 +411,7 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             groups=mid_chs,
             bias=False,
             bit_width=dw_bit_width,
-            weight_scaling_per_output_channel=scaling_per_channel)
+            weight_scaling_per_output_channel=dw_scaling_per_channel)
         self.bn2 = nn.Identity() if merge_bn else nn.BatchNorm2d(mid_chs, eps=bn_eps)
         self.act2 = layers.with_defaults.make_quant_relu(bit_width=bit_width)
 
@@ -417,7 +423,7 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             padding_type=padding_type,
             bias=False,
             bit_width=bit_width,
-            weight_scaling_per_output_channel=scaling_per_channel,
+            weight_scaling_per_output_channel=pw_scaling_per_channel,
             groups=1,
             stride=1)
         self.bn3 = nn.Identity() if merge_bn else nn.BatchNorm2d(out_chs, eps=bn_eps)
@@ -482,6 +488,7 @@ def generic_efficientnet_edge(
         first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
         first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
         first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
+        dw_scaling_per_channel=hparams.model.DW_SCALING_PER_CHANNEL,
         scaling_per_channel=hparams.model.SCALING_PER_CHANNEL,
         bit_width=hparams.model.BIT_WIDTH,
         dw_bit_width=hparams.model.DW_BIT_WIDTH,
