@@ -39,6 +39,7 @@ from .models import models_dict
 from .models.layers.make_layer import MakeLayerWithDefaults
 from .models import layers
 from .smoothing import LabelSmoothing
+from .reg import MaxAveScalingReg
 from .hydra_logger import *
 from .utils import filter_keys, state_dict_from_url_or_path, topk_accuracy, AverageMeter, lowercase_keys
 
@@ -96,6 +97,10 @@ class QuantImageNetClassification(LightningModule):
             self.__loss_fn = LabelSmoothing(self.hparams.LABEL_SMOOTHING)
         else:
             self.__loss_fn = CrossEntropyLoss()
+        if self.hparams.MAX_AVE_SCALING_REG > 0.0:
+            self.max_ave_scaling_reg = MaxAveScalingReg(self.hparams.MAX_AVE_SCALING_REG)
+        else:
+            self.max_ave_scaling_reg = None
 
     def configure_ddp(self, model, device_ids):
         assert len(device_ids) == 1, 'Only 1 GPU per process supported'
@@ -135,10 +140,11 @@ class QuantImageNetClassification(LightningModule):
             loss = sum((self.__loss_fn(o, target) for o in output))
             loss = loss / len(output)
             output = sum(output) / len(output)
-            return loss, output
         else:
             loss = self.__loss_fn(output, target)
-            return loss, output
+        if self.max_ave_scaling_reg is not None:
+            loss += self.max_ave_scaling_reg.loss(self.model)
+        return loss, output
 
     def optimizer_step(
             self,
