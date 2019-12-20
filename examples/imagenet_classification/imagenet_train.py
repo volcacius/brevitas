@@ -38,7 +38,7 @@ def main(hparams):
                                         mode='max')
 
     # A single GPU id has to be passed as a string, otherwise it will be interpreted as # of GPUs
-    trainer = CustomDdpTrainer(gpus=str(hparams.GPU),
+    trainer = CustomDdpTrainer(gpus=str(hparams.GPU) if hparams.GPU is not None else hparams.GPU,
                                max_nb_epochs=hparams.EPOCHS,
                                show_progress_bar=False,
                                early_stop_callback=None,

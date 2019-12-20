@@ -15,38 +15,44 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from brevitas.nn.quant_conv import PaddingType
 from geffnet.efficientnet_builder import decode_arch_def, round_channels, BN_EPS_TF_DEFAULT
 from geffnet.efficientnet_builder import make_divisible, initialize_weight_default, initialize_weight_goog
 from torch import nn
 
+from brevitas.nn.quant_conv import PaddingType
 from . import layers
-from .layers.common import multisample_dropout_classify, residual_add_drop_connect
+from .layers.common import multisample_dropout_classify, residual_add_drop_connect, MergeBnMixin
 
 
-class GenericEfficientNet(nn.Module):
+class GenericEfficientNet(MergeBnMixin, nn.Module):
 
-    def __init__(self,
-                 block_args,
-                 first_layer_weight_bit_width,
-                 first_layer_stride,
-                 first_layer_padding,
-                 bit_width,
-                 bn_eps,
-                 avg_pool_kernel_size,
-                 channel_multiplier,
-                 num_classes=1000,
-                 in_chans=3,
-                 stem_size=32,
-                 num_features=1280,
-                 channel_divisor=8,
-                 channel_min=None,
-                 padding_type=None,
-                 dropout_rate=0.,
-                 dropout_samples=0,
-                 drop_connect_rate=0.,
-                 weight_init='goog'):
+    def __init__(
+            self,
+            block_args,
+            first_layer_weight_bit_width,
+            first_layer_stride,
+            first_layer_padding,
+            scaling_per_channel,
+            merge_bn,
+            bit_width,
+            dw_bit_width,
+            bn_eps,
+            avg_pool_kernel_size,
+            channel_multiplier,
+            num_classes=1000,
+            in_chans=3,
+            stem_size=32,
+            num_features=1280,
+            channel_divisor=8,
+            channel_min=None,
+            padding_type=None,
+            dropout_rate=0.,
+            dropout_samples=0,
+            drop_connect_rate=0.,
+            weight_init='goog'):
         super(GenericEfficientNet, self).__init__()
+        self.merge_bn = merge_bn
+        self.bn_eps = bn_eps
         self.dropout_rate = dropout_rate
         self.dropout_samples = dropout_samples
 
@@ -60,8 +66,9 @@ class GenericEfficientNet(nn.Module):
             padding_type=padding_type,
             bias=False,
             bit_width=first_layer_weight_bit_width,
+            weight_scaling_per_output_channel=scaling_per_channel,
             groups=1)
-        self.bn1 = nn.BatchNorm2d(stem_size, eps=bn_eps)
+        self.bn1 = nn.Identity() if merge_bn else nn.BatchNorm2d(stem_size, eps=bn_eps)
         self.act1 = layers.with_defaults.make_quant_relu(bit_width=bit_width)
         in_chans = stem_size
 
@@ -72,7 +79,10 @@ class GenericEfficientNet(nn.Module):
             padding_type=padding_type,
             bn_eps=bn_eps,
             drop_connect_rate=drop_connect_rate,
-            bit_width=bit_width)
+            bit_width=bit_width,
+            dw_bit_width=dw_bit_width,
+            scaling_per_channel=scaling_per_channel,
+            merge_bn=merge_bn)
         self.blocks = nn.Sequential(*builder(in_chans, block_args))
         in_chans = builder.in_chs
 
@@ -84,8 +94,9 @@ class GenericEfficientNet(nn.Module):
             padding_type=padding_type,
             bias=False,
             bit_width=bit_width,
+            weight_scaling_per_output_channel=scaling_per_channel,
             groups=1)
-        self.bn2 = nn.BatchNorm2d(num_features, eps=bn_eps)
+        self.bn2 = nn.Identity() if merge_bn else nn.BatchNorm2d(num_features, eps=bn_eps)
         self.act2 = layers.with_defaults.make_quant_relu(bit_width=bit_width, return_quant_tensor=True)
         self.global_pool = layers.with_defaults.make_quant_avg_pool(
             bit_width=bit_width,
@@ -127,17 +138,25 @@ class GenericEfficientNet(nn.Module):
             rate=self.dropout_rate)
         return out
 
+    def conv_bn_tuples(self):
+        return [(self.conv_stem, 'conv_stem', 'bn1'),
+                (self.conv_head, 'conv_head', 'bn2')]
+
 
 class EfficientNetBuilder:
 
-    def __init__(self,
-                 bit_width,
-                 padding_type,
-                 bn_eps,
-                 channel_multiplier,
-                 channel_divisor,
-                 channel_min,
-                 drop_connect_rate):
+    def __init__(
+            self,
+            bit_width,
+            dw_bit_width,
+            padding_type,
+            scaling_per_channel,
+            merge_bn,
+            bn_eps,
+            channel_multiplier,
+            channel_divisor,
+            channel_min,
+            drop_connect_rate):
         self.channel_multiplier = channel_multiplier
         self.channel_divisor = channel_divisor
         self.channel_min = channel_min
@@ -145,8 +164,10 @@ class EfficientNetBuilder:
         self.bn_eps = bn_eps
         self.drop_connect_rate = drop_connect_rate
         self.bit_width = bit_width
+        self.dw_bit_width = dw_bit_width
+        self.merge_bn = merge_bn
+        self.scaling_per_channel = scaling_per_channel
         self.shared_hard_tanh = None
-
 
         # updated during build
         self.in_chs = None
@@ -183,10 +204,13 @@ class EfficientNetBuilder:
                 in_chs=in_chs,
                 out_chs=out_chs,
                 bit_width=self.bit_width,
+                dw_bit_width=self.dw_bit_width,
                 bn_eps=self.bn_eps,
                 padding_type=self.padding_type,
                 drop_connect_rate=drop_connect_rate,
                 shared_hard_tanh=self.shared_hard_tanh,
+                scaling_per_channel=self.scaling_per_channel,
+                merge_bn=self.merge_bn,
                 exp_kernel_size=ba['exp_kernel_size'],
                 dw_kernel_size=ba['dw_kernel_size'],
                 pw_kernel_size=ba['pw_kernel_size'],
@@ -204,6 +228,8 @@ class EfficientNetBuilder:
                 padding_type=self.padding_type,
                 drop_connect_rate=drop_connect_rate,
                 shared_hard_tanh=self.shared_hard_tanh,
+                scaling_per_channel=self.scaling_per_channel,
+                merge_bn=self.merge_bn,
                 exp_kernel_size=ba['exp_kernel_size'],
                 pw_kernel_size=ba['pw_kernel_size'],
                 exp_ratio=ba['exp_ratio'],
@@ -247,26 +273,31 @@ class EfficientNetBuilder:
         return blocks
 
 
-class EdgeResidual(nn.Module):
+class EdgeResidual(MergeBnMixin, nn.Module):
     """ EdgeTPU Residual block with expansion convolution followed by pointwise-linear w/ stride"""
 
-    def __init__(self,
-                 in_chs,
-                 out_chs,
-                 bit_width,
-                 padding_type,
-                 bn_eps,
-                 exp_kernel_size,
-                 exp_ratio,
-                 fake_in_chs,
-                 stride,
-                 has_residual,
-                 pw_kernel_size,
-                 drop_connect_rate,
-                 shared_hard_tanh):
+    def __init__(
+            self,
+            in_chs,
+            out_chs,
+            bit_width,
+            padding_type,
+            bn_eps,
+            exp_kernel_size,
+            exp_ratio,
+            fake_in_chs,
+            stride,
+            has_residual,
+            pw_kernel_size,
+            drop_connect_rate,
+            scaling_per_channel,
+            shared_hard_tanh,
+            merge_bn):
         super(EdgeResidual, self).__init__()
         mid_chs = make_divisible(fake_in_chs * exp_ratio) if fake_in_chs > 0 else make_divisible(in_chs * exp_ratio)
         self.has_residual = has_residual
+        self.merge_bn = merge_bn
+        self.bn_eps = bn_eps
         self.drop_connect_rate = drop_connect_rate
         self.shared_hard_tanh = shared_hard_tanh
 
@@ -278,9 +309,10 @@ class EdgeResidual(nn.Module):
             padding_type=padding_type,
             bias=False,
             bit_width=bit_width,
+            weight_scaling_per_output_channel=scaling_per_channel,
             groups=1,
             stride=1)
-        self.bn1 = nn.BatchNorm2d(mid_chs, eps=bn_eps)
+        self.bn1 = nn.Identity() if merge_bn else nn.BatchNorm2d(mid_chs, eps=bn_eps)
         self.act1 = layers.with_defaults.make_quant_relu(bit_width=bit_width)
 
         # Point-wise linear projection
@@ -291,9 +323,14 @@ class EdgeResidual(nn.Module):
             stride=stride,
             padding_type=padding_type,
             bit_width=bit_width,
+            weight_scaling_per_output_channel=scaling_per_channel,
             groups=1,
             bias=False)
-        self.bn2 = nn.BatchNorm2d(out_chs, eps=bn_eps)
+        self.bn2 = nn.Identity() if merge_bn else nn.BatchNorm2d(out_chs, eps=bn_eps)
+
+    def conv_bn_tuples(self):
+        return [(self.conv_exp, 'conv_exp', 'bn1'),
+                (self.conv_pwl, 'conv_pwl', 'bn2')]
 
     def forward(self, x):
         residual = x
@@ -313,27 +350,33 @@ class EdgeResidual(nn.Module):
         return x
 
 
-class InvertedResidual(nn.Module):
+class InvertedResidual(MergeBnMixin, nn.Module):
 
-    def __init__(self,
-                 in_chs,
-                 out_chs,
-                 padding_type,
-                 bn_eps,
-                 bit_width,
-                 dw_kernel_size,
-                 stride,
-                 has_residual,
-                 exp_ratio,
-                 exp_kernel_size,
-                 pw_kernel_size,
-                 drop_connect_rate,
-                 shared_hard_tanh):
+    def __init__(
+            self,
+            in_chs,
+            out_chs,
+            padding_type,
+            bn_eps,
+            bit_width,
+            dw_bit_width,
+            dw_kernel_size,
+            stride,
+            has_residual,
+            exp_ratio,
+            exp_kernel_size,
+            pw_kernel_size,
+            scaling_per_channel,
+            drop_connect_rate,
+            shared_hard_tanh,
+            merge_bn):
         super(InvertedResidual, self).__init__()
         mid_chs: int = make_divisible(in_chs * exp_ratio)
         self.has_residual = has_residual
         self.drop_connect_rate = drop_connect_rate
         self.shared_hard_tanh = shared_hard_tanh
+        self.merge_bn = merge_bn
+        self.bn_eps = bn_eps
 
         # Point-wise expansion
         self.conv_pw = layers.with_defaults.make_quant_conv2d(
@@ -343,12 +386,13 @@ class InvertedResidual(nn.Module):
             padding_type=padding_type,
             bias=False,
             bit_width=bit_width,
+            weight_scaling_per_output_channel=scaling_per_channel,
             stride=1,
             groups=1)
-        self.bn1 = nn.BatchNorm2d(mid_chs, eps=bn_eps)
+        self.bn1 = nn.Identity() if merge_bn else nn.BatchNorm2d(mid_chs, eps=bn_eps)
         self.act1 = layers.with_defaults.make_quant_relu(
-            bit_width=bit_width,
-            scaling_per_channel=True,
+            bit_width=dw_bit_width,  # is input to dw conv
+            scaling_per_channel=scaling_per_channel,
             per_channel_broadcastable_shape=(1, mid_chs, 1, 1))
 
         # Depth-wise convolution
@@ -360,8 +404,9 @@ class InvertedResidual(nn.Module):
             padding_type=padding_type,
             groups=mid_chs,
             bias=False,
-            bit_width=bit_width)
-        self.bn2 = nn.BatchNorm2d(mid_chs, eps=bn_eps)
+            bit_width=dw_bit_width,
+            weight_scaling_per_output_channel=scaling_per_channel)
+        self.bn2 = nn.Identity() if merge_bn else nn.BatchNorm2d(mid_chs, eps=bn_eps)
         self.act2 = layers.with_defaults.make_quant_relu(bit_width=bit_width)
 
         # Point-wise linear projection
@@ -372,9 +417,15 @@ class InvertedResidual(nn.Module):
             padding_type=padding_type,
             bias=False,
             bit_width=bit_width,
+            weight_scaling_per_output_channel=scaling_per_channel,
             groups=1,
             stride=1)
-        self.bn3 = nn.BatchNorm2d(out_chs, eps=bn_eps)
+        self.bn3 = nn.Identity() if merge_bn else nn.BatchNorm2d(out_chs, eps=bn_eps)
+
+    def conv_bn_tuples(self):
+        return [(self.conv_pw, 'conv_pw', 'bn1'),
+                (self.conv_dw, 'conv_dw', 'bn2'),
+                (self.conv_pwl, 'conv_pwl', 'bn3')]
 
     def forward(self, x):
         residual = x
@@ -401,11 +452,12 @@ class InvertedResidual(nn.Module):
         return x
 
 
-def generic_efficientnet_edge(hparams,
-                              bn_eps,
-                              padding_type,
-                              channel_multiplier,
-                              depth_multiplier):
+def generic_efficientnet_edge(
+        hparams,
+        bn_eps,
+        padding_type,
+        channel_multiplier,
+        depth_multiplier):
     arch_def = [
         # NOTE `fc` is present to override a mismatch between stem channels and in chs not
         # present in other models
@@ -430,10 +482,13 @@ def generic_efficientnet_edge(hparams,
         first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
         first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
         first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
+        scaling_per_channel=hparams.model.SCALING_PER_CHANNEL,
         bit_width=hparams.model.BIT_WIDTH,
+        dw_bit_width=hparams.model.DW_BIT_WIDTH,
         dropout_rate=hparams.dropout.RATE,
         dropout_samples=hparams.dropout.SAMPLES,
-        avg_pool_kernel_size=hparams.model.AVG_POOL_KERNEL_SIZE)
+        avg_pool_kernel_size=hparams.model.AVG_POOL_KERNEL_SIZE,
+        merge_bn=hparams.model.MERGE_BN)
     return model
 
 

@@ -11,13 +11,18 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
-from apex.optimizers import FusedAdam
+
 from pytorch_lightning.root_module.root_module import LightningModule
 from torch.nn import CrossEntropyLoss
 from torch.optim import SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
 
 from .utils import MissingOptionalDependency
+
+try:
+    from apex.optimizers import FusedAdam
+except Exception as e:
+    FusedAdam = MissingOptionalDependency(e)
 
 try:
     from apex.optimizers import FusedNovoGrad
