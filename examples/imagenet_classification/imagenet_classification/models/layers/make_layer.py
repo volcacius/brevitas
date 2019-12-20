@@ -50,6 +50,7 @@ def make_quant_conv2d(in_channels,
                       weight_narrow_range,
                       weight_scaling_min_val):
     bias_quant_type = weight_quant_type if enable_bias_quant else QuantType.FP
+    compute_output_meta = bias and enable_bias_quant and bias_quant_type != QuantType.FP
     return qnn.QuantConv2d(in_channels,
                            out_channels,
                            groups=groups,
@@ -58,8 +59,8 @@ def make_quant_conv2d(in_channels,
                            stride=stride,
                            bias=bias,
                            bias_quant_type=bias_quant_type,
-                           compute_output_bit_width=bias and enable_bias_quant,
-                           compute_output_scale=bias and enable_bias_quant,
+                           compute_output_bit_width=compute_output_meta,
+                           compute_output_scale=compute_output_meta,
                            padding_type=padding_type,
                            weight_bit_width=bit_width,
                            weight_quant_type=weight_quant_type,
@@ -84,11 +85,12 @@ def make_quant_linear(in_channels,
                       weight_narrow_range,
                       weight_scaling_min_val):
     bias_quant_type = weight_quant_type if enable_bias_quant else QuantType.FP
+    compute_output_metadata = bias and enable_bias_quant and bias_quant_type != QuantType.FP
     return qnn.QuantLinear(in_channels, out_channels,
                            bias=bias,
                            bias_quant_type=bias_quant_type,
-                           compute_output_bit_width=bias and enable_bias_quant,
-                           compute_output_scale=bias and enable_bias_quant,
+                           compute_output_bit_width=compute_output_metadata,
+                           compute_output_scale=compute_output_metadata,
                            weight_bit_width=bit_width,
                            weight_quant_type=weight_quant_type,
                            weight_scaling_impl_type=weight_scaling_impl_type,
