@@ -85,7 +85,6 @@ class MergeBnMixin:
             missing_keys,
             unexpected_keys,
             error_msgs):
-        missing_bias_keys = None
         if self.merge_bn:
             _merge_bn_layers(
                 conv_bn_tuples=self.conv_bn_tuples(),
@@ -118,9 +117,10 @@ def _merge_bn_layers(conv_bn_tuples, bn_eps, prefix, state_dict):
                 bn_bias=state_dict[bn_bias_key],
                 affine_only=False)
             mul_shape = conv_mod.per_output_channel_broadcastable_shape
-            conv_mod.weight.data *= mul_factor.view(mul_shape)
-
+            conv_weight_key = prefix + conv_name + '.weight'
             conv_bias_key = prefix + conv_name + '.bias'
+            state_dict[conv_weight_key] *= mul_factor.view(mul_shape)
+
             if conv_mod.bias is not None:
                  assert conv_bias_key in state_dict
                  state_dict[conv_bias_key] += add_factor
