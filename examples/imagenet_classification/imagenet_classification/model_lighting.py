@@ -104,7 +104,6 @@ class QuantImageNetClassification(LightningModule):
 
     def configure_ddp(self, model, device_ids):
         assert len(device_ids) == 1, 'Only 1 GPU per process supported'
-        self.set_random_seed(self.hparams.SEED + device_ids[0])
         if torch.distributed.is_available():
             from .pl_overrides.pl_apex import LightningApexDistributedDataParallel as ApexDDP
             model = ApexDDP(model)
@@ -244,12 +243,6 @@ class QuantImageNetClassification(LightningModule):
         mean = list(self.hparams.preprocess.MEAN)
         std = list(self.hparams.preprocess.STD)
 
-        def _worker_init_fn(id):
-            seed = self.hparams.SEED + self.trainer.proc_rank + id
-            torch.manual_seed(seed)
-            np.random.seed(seed)
-            random.seed(seed)
-
         if train:
             dataloader = imagenet_train_loader(
                 batch_size=self.hparams.TRAIN_BATCH_SIZE,
@@ -258,7 +251,7 @@ class QuantImageNetClassification(LightningModule):
                 mean=mean,
                 std=std,
                 workers=self.hparams.WORKERS,
-                worker_init_fn=_worker_init_fn,
+                worker_init_fn=None,
                 crop_size=self.hparams.preprocess.CROP_SIZE,
                 resize_impl_type=self.hparams.preprocess.RESIZE_IMPL_TYPE)
         else:
