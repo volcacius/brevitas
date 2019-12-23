@@ -518,6 +518,7 @@ def generic_efficientnet_edge(
         dw_bit_width=hparams.model.DW_BIT_WIDTH,
         dropout_rate=hparams.dropout.RATE,
         dropout_samples=hparams.dropout.SAMPLES,
+        drop_connect_rate=hparams.drop_connect.RATE,
         avg_pool_kernel_size=hparams.model.AVG_POOL_KERNEL_SIZE,
         merge_bn=hparams.model.MERGE_BN)
     return model

@@ -20,10 +20,6 @@ MAX_AVE_SCALING_REG: 0.0
 
 WARMUP_EPOCHS: 0
 
-dropout:
-  RATE: 0.2
-  SAMPLES: 1
-
 NO_WD:
   - 'bn'
   - 'bias'

@@ -16,6 +16,12 @@ model:
   DW_SCALING_STATS_OP: MAX
   SCALING_STATS_OP: MAX
 
+dropout:
+  RATE: 0.2
+  SAMPLES: 1
+
+drop_connect:
+  RATE: 0.2
 
 preprocess:
   CROP_SIZE: 224
