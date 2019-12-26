@@ -67,7 +67,7 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             stride=first_layer_stride,
             padding=first_layer_padding,
             padding_type=padding_type,
-            bias=False,
+            bias=merge_bn,
             bit_width=first_layer_weight_bit_width,
             weight_scaling_per_output_channel=scaling_per_channel,
             weight_scaling_stats_op=scaling_stats_op,
@@ -99,7 +99,7 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             kernel_size=1,
             stride=1,
             padding_type=padding_type,
-            bias=False,
+            bias=merge_bn,
             bit_width=bit_width,
             weight_scaling_per_output_channel=scaling_per_channel,
             weight_scaling_stats_op=scaling_stats_op,
@@ -326,7 +326,7 @@ class EdgeResidual(MergeBnMixin, nn.Module):
             out_channels=mid_chs,
             kernel_size=exp_kernel_size,
             padding_type=padding_type,
-            bias=False,
+            bias=merge_bn,
             bit_width=bit_width,
             weight_scaling_per_output_channel=scaling_per_channel,
             weight_scaling_stats_op=scaling_stats_op,
@@ -346,7 +346,7 @@ class EdgeResidual(MergeBnMixin, nn.Module):
             weight_scaling_per_output_channel=scaling_per_channel,
             weight_scaling_stats_op=scaling_stats_op,
             groups=1,
-            bias=False)
+            bias=merge_bn)
         self.bn2 = nn.Identity() if merge_bn else nn.BatchNorm2d(out_chs, eps=bn_eps)
 
     def conv_bn_tuples(self):
@@ -408,7 +408,7 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             mid_chs,
             exp_kernel_size,
             padding_type=padding_type,
-            bias=False,
+            bias=merge_bn,
             bit_width=bit_width,
             weight_scaling_per_output_channel=pw_scaling_per_channel,
             weight_scaling_stats_op=pw_scaling_stats_op,
@@ -429,7 +429,7 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             stride=stride,
             padding_type=padding_type,
             groups=mid_chs,
-            bias=False,
+            bias=merge_bn,
             bit_width=dw_bit_width,
             weight_scaling_per_output_channel=dw_scaling_per_channel,
             weight_scaling_stats_op=dw_scaling_stats_op)
@@ -442,7 +442,7 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             out_chs,
             pw_kernel_size,
             padding_type=padding_type,
-            bias=False,
+            bias=merge_bn,
             bit_width=bit_width,
             weight_scaling_per_output_channel=pw_scaling_per_channel,
             weight_scaling_stats_op=pw_scaling_stats_op,
