@@ -121,9 +121,10 @@ def _merge_bn_layers(conv_bn_tuples, bn_eps, prefix, state_dict):
             conv_bias_key = prefix + conv_name + '.bias'
             state_dict[conv_weight_key] *= mul_factor.view(mul_shape)
 
-            if conv_mod.bias is not None:
-                 assert conv_bias_key in state_dict
+            if conv_mod.bias is not None and conv_bias_key in state_dict:
                  state_dict[conv_bias_key] += add_factor
+            elif conv_mod.bias is not None and not conv_bias_key in state_dict:
+                state_dict[conv_bias_key] = add_factor
             else:
                 conv_mod.bias = nn.Parameter(add_factor)
                 # add it to the dict any to avoid missing key error
