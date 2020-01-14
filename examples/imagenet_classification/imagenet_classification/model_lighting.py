@@ -19,6 +19,8 @@ from torch.optim import SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
 from brevitas import config
 
+import brevitas.nn as qnn
+
 from .utils import MissingOptionalDependency
 
 try:
@@ -197,13 +199,26 @@ class QuantImageNetClassification(LightningModule):
             'log': log_dict})
         return output
 
+    def weight_ema_update(self):
+        for name, mod in self.model.named_modules():
+            if isinstance(mod, (qnn.QuantConv2d, qnn.QuantLinear)):
+                new_weight, _, _ = mod.weight_quant(mod.weight.detach())
+                if hasattr(mod, 'ema_weight'):
+                    mod.ema_weight = mod.ema_weight * self.hparams.WEIGHT_EMA_COEFF \
+                                     + (1.0 - self.hparams.WEIGHT_EMA_COEFF) * new_weight.detach()
+                else:
+                    mod.ema_weight = new_weight.detach()
+
     def on_epoch_start(self):
+        # Reset loggers
         self.train_loss_meter.reset()
         self.train_top1_meter.reset()
         self.train_top5_meter.reset()
         self.val_loss_meter.reset()
         self.val_top1_meter.reset()
         self.val_top5_meter.reset()
+        # Update EMA
+        self.weight_ema_update()
 
     def validation_step(self, batch, batch_idx):
         images, target = batch
