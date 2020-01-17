@@ -59,6 +59,7 @@ from brevitas.core.scaling import ScalingImplType, ParameterStatsScaling, StatsI
 from brevitas.core.scaling import StandaloneScaling, SCALING_SCALAR_SHAPE
 from brevitas.function.ops_ste import round_ste
 from brevitas.core.stats import StatsOp
+from brevitas.core.norm import MaxParameterListNorm, NormImplType
 from brevitas import config
 from brevitas.config import docstrings
 
@@ -99,6 +100,7 @@ class ParameterQuantProxy(QuantProxy):
 def _weight_quant_init_impl(bit_width: Optional[int],
                             quant_type: QuantType,
                             narrow_range: bool,
+                            norm_impl_type: NormImplType,
                             scaling_override: Optional[nn.Module],
                             restrict_scaling_type: RestrictValueType,
                             scaling_const: float,
@@ -200,13 +202,25 @@ def _weight_quant_init_impl(bit_width: Optional[int],
             else:
                 bit_width_impl = bit_width_impl_override
 
-            if bit_width_impl_type == BitWidthImplType.PARAMETER or \
+            if bit_width_impl_type != BitWidthImplType.CONST or \
                     bit_width_impl_type == BitWidthImplType.CONST and \
-                    scaling_impl_type == ScalingImplType.PARAMETER_FROM_STATS:
+                    norm_impl_type == NormImplType.SAME_AS_SCALING and \
+                    (scaling_impl_type != ScalingImplType.STATS or
+                    scaling_impl_type != ScalingImplType.AFFINE_STATS):
                 tensor_clamp_impl = TensorClamp()
             else:
                 tensor_clamp_impl = TensorClampSte()
-
+            if norm_impl_type == NormImplType.MAX or norm_impl_type == NormImplType.MAX_AVE:
+                norm_impl = MaxParameterListNorm(stats_op=StatsOp(norm_impl_type),
+                                                 tracked_parameter_list=tracked_parameter_list,
+                                                 input_view_shape_impl=scaling_stats_input_view_shape_impl,
+                                                 input_concat_dim=scaling_stats_input_concat_dim,
+                                                 reduce_dim=scaling_stats_reduce_dim,
+                                                 output_shape=scaling_shape)
+            elif norm_impl_type == NormImplType.SAME_AS_SCALING:
+                norm_impl = None
+            else:
+                raise Exception("Norm impl type {} not supported yet".format(norm_impl_type))
             float_to_int_impl = RestrictValue(restrict_value_type=RestrictValueType.INT,
                                               float_to_int_impl_type=FloatToIntImplType.ROUND,
                                               min_val=None)
@@ -220,6 +234,7 @@ def _weight_quant_init_impl(bit_width: Optional[int],
                                              tensor_clamp_impl=tensor_clamp_impl,
                                              msb_clamp_bit_width_impl=bit_width_impl,
                                              float_to_int_impl=float_to_int_impl,
+                                             norm_impl=norm_impl,
                                              runtime=False)
         else:
             raise Exception('Unsupported weight quantization: {} bit width, {} quantization.'

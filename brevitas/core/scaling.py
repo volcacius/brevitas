@@ -148,7 +148,6 @@ class StatsScaling(torch.jit.ScriptModule):
     __constants__ = ['const_affine_weight', 'const_affine_bias']
 
     def __init__(self,
-                 stats_op: StatsOp,
                  restrict_scaling_type: RestrictValueType,
                  stats_output_shape: Tuple[int, ...],
                  scaling_min_val: Optional[float],
@@ -160,14 +159,10 @@ class StatsScaling(torch.jit.ScriptModule):
                 or restrict_scaling_type == RestrictValueType.POWER_OF_TWO):
             raise Exception("Restriction of type {} is not supported for stats scaling."
                             .format(str(restrict_scaling_type)))
-        if stats_op == StatsOp.MAX_AVE and stats_output_shape != SCALING_SCALAR_SHAPE:
-            raise Exception("Scaling with MAX_AVE stats can't be over output channels.")
-
         if affine:
             self.affine_rescaling = AffineRescaling(stats_output_shape)
         else:
             self.affine_rescaling = Identity()
-
         self.restrict_scaling = RestrictValue(restrict_scaling_type, FloatToIntImplType.CEIL, scaling_min_val)
         self.restrict_scaling_preprocess = RestrictValue.restrict_value_op(restrict_scaling_type,
                                                                            restrict_value_op_impl_type=
@@ -232,6 +227,9 @@ class ParameterStatsScaling(torch.jit.ScriptModule):
                  affine: bool) -> None:
         super(ParameterStatsScaling, self).__init__()
 
+        if stats_op == StatsOp.MAX_AVE and stats_reduce_dim is not None:
+            raise Exception("Scaling with MAX_AVE stats can't be over output channels.")
+
         self.parameter_list_stats = ParameterListStats(stats_op=stats_op,
                                                        stats_output_shape=stats_output_shape,
                                                        stats_reduce_dim=stats_reduce_dim,
@@ -242,7 +240,6 @@ class ParameterStatsScaling(torch.jit.ScriptModule):
         self.stats_scaling_impl = StatsScaling(restrict_scaling_type=restrict_scaling_type,
                                                scaling_min_val=scaling_min_val,
                                                affine=affine,
-                                               stats_op=stats_op,
                                                stats_output_shape=stats_output_shape)
 
     @torch.jit.script_method
