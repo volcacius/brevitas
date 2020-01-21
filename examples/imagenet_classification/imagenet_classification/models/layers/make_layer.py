@@ -1,35 +1,35 @@
-from torch.nn import functional as F
+from functools import partial
 
 import brevitas.nn as qnn
 from brevitas.core.quant import QuantType
-from brevitas.core.restrict_val import RestrictValueType
-from brevitas.core.scaling import ScalingImplType
-from brevitas.core.stats import StatsOp
-from brevitas.quant_tensor import pack_quant_tensor
 
-QUANT_TYPE = QuantType.INT
-SCALING_MIN_VAL = 2e-16
+from ...utils import lowercase_keys
 
-ACT_SCALING_IMPL_TYPE = ScalingImplType.PARAMETER
-ACT_SCALING_PER_CHANNEL = False
-ACT_SCALING_RESTRICT_SCALING_TYPE = RestrictValueType.LOG_FP
-ACT_MAX_VAL = 6.0
-ACT_RETURN_QUANT_TENSOR = False
-ACT_PER_CHANNEL_BROADCASTABLE_SHAPE = None
-HARD_TANH_THRESHOLD = 10.0
+__all__ = ['MakeLayerWithDefaults']
 
-PADDING = 0
-PADDING_TYPE = qnn.PaddingType.STANDARD
 
-WEIGHT_SCALING_IMPL_TYPE = ScalingImplType.STATS
-WEIGHT_SCALING_PER_OUTPUT_CHANNEL = True
-WEIGHT_SCALING_STATS_OP = StatsOp.MAX
-WEIGHT_RESTRICT_SCALING_TYPE = RestrictValueType.LOG_FP
-WEIGHT_NARROW_RANGE = True
+def make_layer_with_defaults(layer, kwargs_list):
+    cumulative_kwargs = {}
+    for kwargs in kwargs_list:
+        cumulative_kwargs.update(kwargs)
+    return partial(layer, **lowercase_keys(cumulative_kwargs))
 
-ENABLE_BIAS_QUANT = False
 
-HADAMARD_FIXED_SCALE = False
+class MakeLayerWithDefaults:
+
+    def __init__(self, params):
+        self.make_quant_conv2d = make_layer_with_defaults(
+            make_quant_conv2d, [params.quant_weights, params.conv])
+        self.make_quant_linear = make_layer_with_defaults(
+            make_quant_linear, [params.quant_weights])
+        self.make_quant_relu = make_layer_with_defaults(
+            make_quant_relu, [params.quant_act, params.quant_relu])
+        self.make_quant_hard_tanh = make_layer_with_defaults(
+            make_quant_hard_tanh, [params.quant_act, params.quant_hard_tanh])
+        self.make_quant_avg_pool = make_layer_with_defaults(
+            make_quant_avg_pool, [params.quant_avg_pool])
+        self.make_hadamard_classifier = make_layer_with_defaults(
+            make_hadamard_classifier, [])
 
 
 def make_quant_conv2d(in_channels,
@@ -39,17 +39,17 @@ def make_quant_conv2d(in_channels,
                       groups,
                       bias,
                       bit_width,
-                      padding=PADDING,
-                      padding_type=PADDING_TYPE,
-                      enable_bias_quant=ENABLE_BIAS_QUANT,
-                      weight_quant_type=QUANT_TYPE,
-                      weight_scaling_impl_type=WEIGHT_SCALING_IMPL_TYPE,
-                      weight_scaling_stats_op=WEIGHT_SCALING_STATS_OP,
-                      weight_scaling_per_output_channel=WEIGHT_SCALING_PER_OUTPUT_CHANNEL,
-                      weight_restrict_scaling_type=WEIGHT_RESTRICT_SCALING_TYPE,
-                      weight_narrow_range=WEIGHT_NARROW_RANGE,
-                      weight_scaling_min_val=SCALING_MIN_VAL):
-    bias_quant_type = QUANT_TYPE if enable_bias_quant else QuantType.FP
+                      padding,
+                      padding_type,
+                      enable_bias_quant,
+                      weight_quant_type,
+                      weight_scaling_impl_type,
+                      weight_scaling_stats_op,
+                      weight_scaling_per_output_channel,
+                      weight_restrict_scaling_type,
+                      weight_narrow_range,
+                      weight_scaling_min_val):
+    bias_quant_type = weight_quant_type if enable_bias_quant else QuantType.FP
     return qnn.QuantConv2d(in_channels,
                            out_channels,
                            groups=groups,
@@ -75,15 +75,15 @@ def make_quant_linear(in_channels,
                       out_channels,
                       bias,
                       bit_width,
-                      enable_bias_quant=ENABLE_BIAS_QUANT,
-                      weight_quant_type=QUANT_TYPE,
-                      weight_scaling_impl_type=WEIGHT_SCALING_IMPL_TYPE,
-                      weight_scaling_stats_op=WEIGHT_SCALING_STATS_OP,
-                      weight_scaling_per_output_channel=WEIGHT_SCALING_PER_OUTPUT_CHANNEL,
-                      weight_restrict_scaling_type=WEIGHT_RESTRICT_SCALING_TYPE,
-                      weight_narrow_range=WEIGHT_NARROW_RANGE,
-                      weight_scaling_min_val=SCALING_MIN_VAL):
-    bias_quant_type = QUANT_TYPE if enable_bias_quant else QuantType.FP
+                      enable_bias_quant,
+                      weight_quant_type,
+                      weight_scaling_impl_type,
+                      weight_scaling_stats_op,
+                      weight_scaling_per_output_channel,
+                      weight_restrict_scaling_type,
+                      weight_narrow_range,
+                      weight_scaling_min_val):
+    bias_quant_type = weight_quant_type if enable_bias_quant else QuantType.FP
     return qnn.QuantLinear(in_channels, out_channels,
                            bias=bias,
                            bias_quant_type=bias_quant_type,
@@ -100,14 +100,14 @@ def make_quant_linear(in_channels,
 
 
 def make_quant_relu(bit_width,
-                    quant_type=QUANT_TYPE,
-                    scaling_impl_type=ACT_SCALING_IMPL_TYPE,
-                    scaling_per_channel=ACT_SCALING_PER_CHANNEL,
-                    restrict_scaling_type=ACT_SCALING_RESTRICT_SCALING_TYPE,
-                    scaling_min_val=SCALING_MIN_VAL,
-                    max_val=ACT_MAX_VAL,
-                    return_quant_tensor=ACT_RETURN_QUANT_TENSOR,
-                    per_channel_broadcastable_shape=ACT_PER_CHANNEL_BROADCASTABLE_SHAPE):
+                    quant_type,
+                    scaling_impl_type,
+                    scaling_per_channel,
+                    restrict_scaling_type,
+                    scaling_min_val,
+                    max_val,
+                    return_quant_tensor,
+                    per_channel_broadcastable_shape):
     return qnn.QuantReLU(bit_width=bit_width,
                          quant_type=quant_type,
                          scaling_impl_type=scaling_impl_type,
@@ -120,14 +120,14 @@ def make_quant_relu(bit_width,
 
 
 def make_quant_hard_tanh(bit_width,
-                         quant_type=QUANT_TYPE,
-                         scaling_impl_type=ACT_SCALING_IMPL_TYPE,
-                         scaling_per_channel=ACT_SCALING_PER_CHANNEL,
-                         restrict_scaling_type=ACT_SCALING_RESTRICT_SCALING_TYPE,
-                         scaling_min_val=SCALING_MIN_VAL,
-                         threshold=HARD_TANH_THRESHOLD,
-                         return_quant_tensor=ACT_RETURN_QUANT_TENSOR,
-                         per_channel_broadcastable_shape=ACT_PER_CHANNEL_BROADCASTABLE_SHAPE):
+                         quant_type,
+                         scaling_impl_type,
+                         scaling_per_channel,
+                         restrict_scaling_type,
+                         scaling_min_val,
+                         threshold,
+                         return_quant_tensor,
+                         per_channel_broadcastable_shape):
     return qnn.QuantHardTanh(bit_width=bit_width,
                              quant_type=quant_type,
                              scaling_per_channel=scaling_per_channel,
@@ -144,7 +144,7 @@ def make_quant_avg_pool(bit_width,
                         kernel_size,
                         stride,
                         signed,
-                        quant_type=QUANT_TYPE):
+                        quant_type):
     return qnn.QuantAvgPool2d(kernel_size=kernel_size,
                               quant_type=quant_type,
                               signed=signed,
@@ -155,26 +155,7 @@ def make_quant_avg_pool(bit_width,
 
 def make_hadamard_classifier(in_channels,
                              out_channels,
-                             fixed_scale=HADAMARD_FIXED_SCALE):
+                             fixed_scale):
     return qnn.HadamardClassifier(in_channels=in_channels,
                                   out_channels=out_channels,
                                   fixed_scale=fixed_scale)
-
-
-def multisample_dropout_classify(x, classifier, samples, rate, training):
-    x, scale, bit_width = x
-    x = x.view(x.size(0), -1)
-    if training and samples == 0:
-        out = F.dropout(x, p=rate)
-        out = classifier(pack_quant_tensor(out, scale, bit_width))
-        return out
-    if training and samples > 1:
-        out_list = []
-        for i in range(samples):
-            out = F.dropout(x, p=rate)
-            out = classifier(pack_quant_tensor(out, scale, bit_width))
-            out_list.append(out)
-        return tuple(out_list)
-    else:
-        out = classifier(pack_quant_tensor(x, scale, bit_width))
-        return out

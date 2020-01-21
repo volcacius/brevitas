@@ -34,7 +34,8 @@
 
 import torch
 import torch.nn as nn
-from .common import make_quant_conv2d, make_quant_linear, make_quant_relu
+
+from . import layers
 
 __all__ = [
     'QuantVGG', 'quant_vgg11', 'quant_vgg11_bn', 'quant_vgg13', 'quant_vgg13_bn', 'quant_vgg16', 'quant_vgg16_bn',
@@ -49,14 +50,14 @@ class QuantVGG(nn.Module):
         self.features = make_layers(cfg, batch_norm, bit_width)
         self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
         self.classifier = nn.Sequential(
-            make_quant_linear(512 * 7 * 7, 4096, bias=True, bit_width=bit_width),
-            make_quant_relu(bit_width),
+            layers.with_defaults.make_quant_linear(512 * 7 * 7, 4096, bias=True, bit_width=bit_width),
+            layers.with_defaults.make_quant_relu(bit_width),
             nn.Dropout(),
-            make_quant_linear(4096, 4096, bias=True, bit_width=bit_width),
-            make_quant_relu(bit_width),
+            layers.with_defaults.make_quant_linear(4096, 4096, bias=True, bit_width=bit_width),
+            layers.with_defaults.make_quant_relu(bit_width),
             nn.Dropout(),
-            make_quant_linear(4096, num_classes, bias=False, bit_width=bit_width,
-                              weight_scaling_per_output_channel=False),
+            layers.with_defaults.make_quant_linear(4096, num_classes, bias=False, bit_width=bit_width,
+                                                   weight_scaling_per_output_channel=False),
         )
         self._initialize_weights()
 

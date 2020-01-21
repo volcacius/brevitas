@@ -15,41 +15,45 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from brevitas.nn.quant_conv import PaddingType
 from geffnet.efficientnet_builder import decode_arch_def, round_channels, drop_connect, BN_EPS_TF_DEFAULT
 from geffnet.efficientnet_builder import make_divisible, initialize_weight_default, initialize_weight_goog
 from torch import nn
 
-from brevitas.nn.quant_conv import PaddingType
-from .common import *
+from . import layers
+from .layers.common import multisample_dropout_classify
 
 
 def quant_tf_efficientnet_es(hparams):
     """ EfficientNet-Edge Small. Tensorflow compatible variant  """
-    model = generic_efficientnet_edge(hparams,
-                                      bn_eps=BN_EPS_TF_DEFAULT,
-                                      padding_type=PaddingType.SAME,
-                                      channel_multiplier=1.0,
-                                      depth_multiplier=1.0)
+    model = generic_efficientnet_edge(
+        hparams,
+        bn_eps=BN_EPS_TF_DEFAULT,
+        padding_type=PaddingType.SAME,
+        channel_multiplier=1.0,
+        depth_multiplier=1.0)
     return model
 
 
 def quant_tf_efficientnet_em(hparams):
     """ EfficientNet-Edge-Medium. Tensorflow compatible variant  """
-    model = generic_efficientnet_edge(hparams,
-                                      bn_eps=BN_EPS_TF_DEFAULT,
-                                      padding_type=PaddingType.SAME,
-                                      channel_multiplier=1.0,
-                                      depth_multiplier=1.1)
+    model = generic_efficientnet_edge(
+        hparams,
+        bn_eps=BN_EPS_TF_DEFAULT,
+        padding_type=PaddingType.SAME,
+        channel_multiplier=1.0,
+        depth_multiplier=1.1)
     return model
 
 
 def quant_tf_efficientnet_el(hparams):
     """ EfficientNet-Edge-Large. Tensorflow compatible variant  """
-    model = generic_efficientnet_edge(hparams,
-                                      bn_eps=BN_EPS_TF_DEFAULT,
-                                      padding_type=PaddingType.SAME,
-                                      channel_multiplier=1.2,
-                                      depth_multiplier=1.4)
+    model = generic_efficientnet_edge(
+        hparams,
+        bn_eps=BN_EPS_TF_DEFAULT,
+        padding_type=PaddingType.SAME,
+        channel_multiplier=1.2,
+        depth_multiplier=1.4)
     return model
 
 
@@ -72,18 +76,19 @@ def generic_efficientnet_edge(hparams,
     num_features = round_channels(1280, channel_multiplier, 8, None)
     stem_size = 32
     channel_multiplier = channel_multiplier
-    model = GenericEfficientNet(block_args,
-                                bn_eps=bn_eps,
-                                padding_type=padding_type,
-                                num_features=num_features,
-                                channel_multiplier=channel_multiplier,
-                                stem_size=stem_size,
-                                first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
-                                first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
-                                first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
-                                bit_width=hparams.model.BIT_WIDTH,
-                                dropout_rate=hparams.dropout.RATE,
-                                dropout_samples=hparams.dropout.SAMPLES)
+    model = GenericEfficientNet(
+        block_args,
+        bn_eps=bn_eps,
+        padding_type=padding_type,
+        num_features=num_features,
+        channel_multiplier=channel_multiplier,
+        stem_size=stem_size,
+        first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
+        first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
+        first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
+        bit_width=hparams.model.BIT_WIDTH,
+        dropout_rate=hparams.dropout.RATE,
+        dropout_samples=hparams.dropout.SAMPLES)
     return model
 
 
@@ -113,49 +118,54 @@ class GenericEfficientNet(nn.Module):
         self.dropout_samples = dropout_samples
 
         stem_size = round_channels(stem_size, channel_multiplier, channel_divisor, channel_min)
-        self.conv_stem = make_quant_conv2d(in_channels=in_chans,
-                                           out_channels=stem_size,
-                                           kernel_size=3,
-                                           stride=first_layer_stride,
-                                           padding=first_layer_padding,
-                                           padding_type=padding_type,
-                                           bias=False,
-                                           bit_width=first_layer_weight_bit_width,
-                                           groups=1)
+        self.conv_stem = layers.with_defaults.make_quant_conv2d(
+            in_channels=in_chans,
+            out_channels=stem_size,
+            kernel_size=3,
+            stride=first_layer_stride,
+            padding=first_layer_padding,
+            padding_type=padding_type,
+            bias=False,
+            bit_width=first_layer_weight_bit_width,
+            groups=1)
         self.bn1 = nn.BatchNorm2d(stem_size, eps=bn_eps)
-        self.act1 = make_quant_relu(bit_width=bit_width)
+        self.act1 = layers.with_defaults.make_quant_relu(bit_width=bit_width)
         in_chans = stem_size
 
-        builder = EfficientNetBuilder(channel_multiplier=channel_multiplier,
-                                      channel_divisor=channel_divisor,
-                                      channel_min=channel_min,
-                                      padding_type=padding_type,
-                                      bn_eps=bn_eps,
-                                      drop_connect_rate=drop_connect_rate,
-                                      bit_width=bit_width)
+        builder = EfficientNetBuilder(
+            channel_multiplier=channel_multiplier,
+            channel_divisor=channel_divisor,
+            channel_min=channel_min,
+            padding_type=padding_type,
+            bn_eps=bn_eps,
+            drop_connect_rate=drop_connect_rate,
+            bit_width=bit_width)
         self.blocks = nn.Sequential(*builder(in_chans, block_args))
         in_chans = builder.in_chs
 
-        self.conv_head = make_quant_conv2d(in_channels=in_chans,
-                                           out_channels=num_features,
-                                           kernel_size=1,
-                                           stride=1,
-                                           padding_type=padding_type,
-                                           bias=False,
-                                           bit_width=bit_width,
-                                           groups=1)
+        self.conv_head = layers.with_defaults.make_quant_conv2d(
+            in_channels=in_chans,
+            out_channels=num_features,
+            kernel_size=1,
+            stride=1,
+            padding_type=padding_type,
+            bias=False,
+            bit_width=bit_width,
+            groups=1)
         self.bn2 = nn.BatchNorm2d(num_features, eps=bn_eps)
-        self.act2 = make_quant_relu(bit_width=bit_width, return_quant_tensor=True)
-        self.global_pool = make_quant_avg_pool(bit_width=bit_width,
-                                               kernel_size=7,
-                                               signed=False,
-                                               stride=1)
-        self.classifier = make_quant_linear(in_channels=num_features,
-                                            out_channels=num_classes,
-                                            bias=True,
-                                            enable_bias_quant=True,
-                                            bit_width=bit_width,
-                                            weight_scaling_per_output_channel=False)
+        self.act2 = layers.with_defaults.make_quant_relu(bit_width=bit_width, return_quant_tensor=False)
+        self.global_pool = layers.with_defaults.make_quant_avg_pool(
+            bit_width=bit_width,
+            kernel_size=7,
+            signed=False,
+            stride=1)
+        self.classifier = layers.with_defaults.make_quant_linear(
+            in_channels=num_features,
+            out_channels=num_classes,
+            bias=True,
+            enable_bias_quant=False,
+            bit_width=bit_width,
+            weight_scaling_per_output_channel=False)
 
         for n, m in self.named_modules():
             if weight_init == 'goog':
@@ -209,10 +219,11 @@ class EfficientNetBuilder:
         self.block_count = 0
 
     def _round_channels(self, chs):
-        return round_channels(chs,
-                              self.channel_multiplier,
-                              self.channel_divisor,
-                              self.channel_min)
+        return round_channels(
+            chs,
+            self.channel_multiplier,
+            self.channel_divisor,
+            self.channel_min)
 
     def _make_block(self, ba):
         bt = ba.pop('block_type')
@@ -225,32 +236,34 @@ class EfficientNetBuilder:
             fake_in_chs = 0
         if bt == 'ir':
             drop_connect_rate = self.drop_connect_rate * self.block_idx / self.block_count
-            block = InvertedResidual(in_chs=in_chs,
-                                     out_chs=out_chs,
-                                     bit_width=self.bit_width,
-                                     bn_eps=self.bn_eps,
-                                     padding_type=self.padding_type,
-                                     drop_connect_rate=drop_connect_rate,
-                                     exp_kernel_size=ba['exp_kernel_size'],
-                                     dw_kernel_size=ba['dw_kernel_size'],
-                                     pw_kernel_size=ba['pw_kernel_size'],
-                                     exp_ratio=ba['exp_ratio'],
-                                     stride=ba['stride'],
-                                     noskip=ba['noskip'])
+            block = InvertedResidual(
+                in_chs=in_chs,
+                out_chs=out_chs,
+                bit_width=self.bit_width,
+                bn_eps=self.bn_eps,
+                padding_type=self.padding_type,
+                drop_connect_rate=drop_connect_rate,
+                exp_kernel_size=ba['exp_kernel_size'],
+                dw_kernel_size=ba['dw_kernel_size'],
+                pw_kernel_size=ba['pw_kernel_size'],
+                exp_ratio=ba['exp_ratio'],
+                stride=ba['stride'],
+                noskip=ba['noskip'])
         elif bt == 'er':
             drop_connect_rate = self.drop_connect_rate * self.block_idx / self.block_count
-            block = EdgeResidual(in_chs=in_chs,
-                                 out_chs=out_chs,
-                                 fake_in_chs=fake_in_chs,
-                                 bit_width=self.bit_width,
-                                 bn_eps=self.bn_eps,
-                                 padding_type=self.padding_type,
-                                 drop_connect_rate=drop_connect_rate,
-                                 exp_kernel_size=ba['exp_kernel_size'],
-                                 pw_kernel_size=ba['pw_kernel_size'],
-                                 exp_ratio=ba['exp_ratio'],
-                                 stride=ba['stride'],
-                                 noskip=ba['noskip'])
+            block = EdgeResidual(
+                in_chs=in_chs,
+                out_chs=out_chs,
+                fake_in_chs=fake_in_chs,
+                bit_width=self.bit_width,
+                bn_eps=self.bn_eps,
+                padding_type=self.padding_type,
+                drop_connect_rate=drop_connect_rate,
+                exp_kernel_size=ba['exp_kernel_size'],
+                pw_kernel_size=ba['pw_kernel_size'],
+                exp_ratio=ba['exp_ratio'],
+                stride=ba['stride'],
+                noskip=ba['noskip'])
         else:
             raise Exception('Uknkown block type {} while building model.'.format(bt))
         self.in_chs = ba['out_chs']  # update in_chs for arg of next block
@@ -311,26 +324,28 @@ class EdgeResidual(nn.Module):
         self.drop_connect_rate = drop_connect_rate
 
         # Expansion convolution
-        self.conv_exp = make_quant_conv2d(in_channels=in_chs,
-                                          out_channels=mid_chs,
-                                          kernel_size=exp_kernel_size,
-                                          padding_type=padding_type,
-                                          bias=False,
-                                          bit_width=bit_width,
-                                          groups=1,
-                                          stride=1)
+        self.conv_exp = layers.with_defaults.make_quant_conv2d(
+            in_channels=in_chs,
+            out_channels=mid_chs,
+            kernel_size=exp_kernel_size,
+            padding_type=padding_type,
+            bias=False,
+            bit_width=bit_width,
+            groups=1,
+            stride=1)
         self.bn1 = nn.BatchNorm2d(mid_chs, eps=bn_eps)
-        self.act1 = make_quant_relu(bit_width=bit_width)
+        self.act1 = layers.with_defaults.make_quant_relu(bit_width=bit_width)
 
         # Point-wise linear projection
-        self.conv_pwl = make_quant_conv2d(mid_chs,
-                                          out_chs,
-                                          pw_kernel_size,
-                                          stride=stride,
-                                          padding_type=padding_type,
-                                          bit_width=bit_width,
-                                          groups=1,
-                                          bias=False)
+        self.conv_pwl = layers.with_defaults.make_quant_conv2d(
+            mid_chs,
+            out_chs,
+            pw_kernel_size,
+            stride=stride,
+            padding_type=padding_type,
+            bit_width=bit_width,
+            groups=1,
+            bias=False)
         self.bn2 = nn.BatchNorm2d(out_chs, eps=bn_eps)
 
     def forward(self, x):
@@ -374,40 +389,44 @@ class InvertedResidual(nn.Module):
         self.drop_connect_rate = drop_connect_rate
 
         # Point-wise expansion
-        self.conv_pw = make_quant_conv2d(in_chs,
-                                         mid_chs,
-                                         exp_kernel_size,
-                                         padding_type=padding_type,
-                                         bias=False,
-                                         bit_width=bit_width,
-                                         stride=1,
-                                         groups=1)
+        self.conv_pw = layers.with_defaults.make_quant_conv2d(
+            in_chs,
+            mid_chs,
+            exp_kernel_size,
+            padding_type=padding_type,
+            bias=False,
+            bit_width=bit_width,
+            stride=1,
+            groups=1)
         self.bn1 = nn.BatchNorm2d(mid_chs, eps=bn_eps)
-        self.act1 = make_quant_relu(bit_width=bit_width,
-                                    scaling_per_channel=True,
-                                    per_channel_broadcastable_shape=(1, mid_chs, 1, 1))
+        self.act1 = layers.with_defaults.make_quant_relu(
+            bit_width=bit_width,
+            scaling_per_channel=True,
+            per_channel_broadcastable_shape=(1, mid_chs, 1, 1))
 
         # Depth-wise convolution
-        self.conv_dw = make_quant_conv2d(mid_chs,
-                                         mid_chs,
-                                         dw_kernel_size,
-                                         stride=stride,
-                                         padding_type=padding_type,
-                                         groups=mid_chs,
-                                         bias=False,
-                                         bit_width=bit_width)
+        self.conv_dw = layers.with_defaults.make_quant_conv2d(
+            mid_chs,
+            mid_chs,
+            dw_kernel_size,
+            stride=stride,
+            padding_type=padding_type,
+            groups=mid_chs,
+            bias=False,
+            bit_width=bit_width)
         self.bn2 = nn.BatchNorm2d(mid_chs, eps=bn_eps)
-        self.act2 = make_quant_relu(bit_width=bit_width)
+        self.act2 = layers.with_defaults.make_quant_relu(bit_width=bit_width)
 
         # Point-wise linear projection
-        self.conv_pwl = make_quant_conv2d(mid_chs,
-                                          out_chs,
-                                          pw_kernel_size,
-                                          padding_type=padding_type,
-                                          bias=False,
-                                          bit_width=bit_width,
-                                          groups=1,
-                                          stride=1)
+        self.conv_pwl = layers.with_defaults.make_quant_conv2d(
+            mid_chs,
+            out_chs,
+            pw_kernel_size,
+            padding_type=padding_type,
+            bias=False,
+            bit_width=bit_width,
+            groups=1,
+            stride=1)
         self.bn3 = nn.BatchNorm2d(out_chs, eps=bn_eps)
 
     def forward(self, x):

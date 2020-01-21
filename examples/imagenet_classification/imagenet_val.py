@@ -9,6 +9,8 @@ import torch.optim
 from imagenet_classification.models import models_dict
 from imagenet_classification.utils import topk_accuracy, state_dict_from_url_or_path, AverageMeter
 from imagenet_classification.data.imagenet_dataloder import imagenet_val_loader
+from imagenet_classification.models import layers
+from imagenet_classification.models.layers.make_layer import MakeLayerWithDefaults
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Validation')
 
@@ -18,7 +20,7 @@ def main(hparams):
 
     random.seed(hparams.SEED)
     torch.manual_seed(hparams.SEED)
-
+    layers.with_defaults = MakeLayerWithDefaults(hparams.layers_defaults)
     model = models_dict[hparams.model.ARCH](hparams)
 
     assert hparams.model.PRETRAINED_MODEL is not None, 'Validation requires a pretrained model'

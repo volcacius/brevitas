@@ -79,6 +79,7 @@ class TrainsHydraTestTubeLogger(TestTubeLogger):
         for k in pseudo_flatten_hparams.keys():
             val = pseudo_flatten_hparams[k]
             val = str(val) if isinstance(val, list) else val
+            val = 'None' if val is None else val
             flatten_hparams[k.lower()] = val
 
         # Log into test-tube. Requires to pass an object with a __dict__ attribute
@@ -89,6 +90,7 @@ class TrainsHydraTestTubeLogger(TestTubeLogger):
 
         # Log into tensorboard hparams plugin (supported in Pytorch 1.3)
         if hasattr(self.experiment, 'add_hparams'):
+
             self.experiment.add_hparams(flatten_hparams, metric_dict={})
 
         # Log into trains

@@ -1,5 +1,6 @@
 defaults:
   - misc
+  - layers_defaults
   - model: quant_mobilenet_v1_4b
   - trainer: train_quant_mobilenet_v1_4b
 

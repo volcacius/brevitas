@@ -8,14 +8,12 @@ import random
 
 from .utils import MissingOptionalDependency
 
-import apex
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
 import numpy as np
 from functools import partial
 from pytorch_lightning.root_module.root_module import LightningModule
-from torch import optim
 from torch.nn import CrossEntropyLoss
 from torch.optim import SGD
 from apex.optimizers import FusedAdam
@@ -28,6 +26,8 @@ except Exception as e:
 
 from .data.imagenet_dataloder import imagenet_train_loader, imagenet_val_loader
 from .models import models_dict
+from .models.layers.make_layer import MakeLayerWithDefaults
+from .models import layers
 from .smoothing import LabelSmoothing
 from .hydra_logger import *
 from .utils import filter_keys, state_dict_from_url_or_path, topk_accuracy, AverageMeter, lowercase_keys
@@ -46,6 +46,7 @@ class QuantImageNetClassification(LightningModule):
     def __init__(self, hparams):
         super(QuantImageNetClassification, self).__init__()
         self.hparams = hparams
+        self.configure_layers_defaults()
         self.configure_model()
         self.configure_loss()
         self.load_pretrained_model()
@@ -59,6 +60,9 @@ class QuantImageNetClassification(LightningModule):
         self.val_loss_meter = AverageMeter()
         self.val_top1_meter = AverageMeter()
         self.val_top5_meter = AverageMeter()
+
+    def configure_layers_defaults(self):
+        layers.with_defaults = MakeLayerWithDefaults(self.hparams.layers_defaults)
 
     def configure_model(self):
         arch = self.hparams.model.ARCH
