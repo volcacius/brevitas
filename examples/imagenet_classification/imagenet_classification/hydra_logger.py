@@ -1,6 +1,11 @@
 import logging
 from enum import auto
 
+from logging.config import ConvertingList, ConvertingDict, valid_ident
+from logging.handlers import QueueHandler, QueueListener
+from queue import Queue
+from atexit import register
+
 import flatdict
 from omegaconf import Config
 from pytorch_lightning.logging import TestTubeLogger
@@ -35,6 +40,8 @@ VAL_LOSS_METER = VAL_ + LOSS_LOG_KEY + METER_SUFFIX
 VAL_TOP1_METER = VAL_ + TOP1_LOG_KEY + METER_SUFFIX
 VAL_TOP5_METER = VAL_ + TOP5_LOG_KEY + METER_SUFFIX
 
+QUEUE_SIZE = 1000
+
 
 class LogStage(AutoName):
     TRAIN_BATCH = auto()
@@ -50,6 +57,7 @@ class TrainsHydraTestTubeLogger(TestTubeLogger):
             trains_project_name,
             trains_task_name,
             trains_logging_enabled,
+            test_tube_logging_enabled,
             name="default",
             description=None,
             debug=False,
@@ -62,38 +70,42 @@ class TrainsHydraTestTubeLogger(TestTubeLogger):
             debug,
             version,
             create_git_tag)
+        self.trains_logging_enabled = trains_logging_enabled
+        self.test_tube_logging_enabled = test_tube_logging_enabled
         if trains_logging_enabled:
             Task.init(project_name=trains_project_name,
                       task_name=trains_task_name,
                       auto_connect_arg_parser=False)
 
+
     @rank_zero_only
     def log_hyperparams(self, hparams):
         self.experiment.debug = self.debug
 
-        # Get the hparams as a flattened dict
-        hparams_dict = Config.to_container(hparams, resolve=True)
-        pseudo_flatten_hparams = flatdict.FlatDict(hparams_dict, delimiter='_')
-        flatten_hparams = {}
-        for k in pseudo_flatten_hparams.keys():
-            val = pseudo_flatten_hparams[k]
-            val = str(val) if isinstance(val, list) else val
-            val = 'None' if val is None else val
-            flatten_hparams[k.lower()] = val
+        if self.test_tube_logging_enabled:
+            # Get the hparams as a flattened dict
+            hparams_dict = Config.to_container(hparams, resolve=True)
+            pseudo_flatten_hparams = flatdict.FlatDict(hparams_dict, delimiter='_')
+            flatten_hparams = {}
+            for k in pseudo_flatten_hparams.keys():
+                val = pseudo_flatten_hparams[k]
+                val = str(val) if isinstance(val, list) else val
+                val = 'None' if val is None else val
+                flatten_hparams[k.lower()] = val
 
-        # Log into test-tube. Requires to pass an object with a __dict__ attribute
-        class TempStruct:
-            def __init__(self, **entries):
-                self.__dict__.update(entries)
+            # Log into test-tube. Requires to pass an object with a __dict__ attribute
+            class TempStruct:
+                def __init__(self, **entries):
+                    self.__dict__.update(entries)
 
-        self.experiment.argparse(TempStruct(**flatten_hparams))
+            self.experiment.argparse(TempStruct(**flatten_hparams))
 
-        # Log into tensorboard hparams plugin (supported in Pytorch 1.3)
-        if hasattr(self.experiment, 'add_hparams'):
-            self.experiment.add_hparams(flatten_hparams, metric_dict={})
+            # Log into tensorboard hparams plugin (supported in Pytorch 1.3)
+            if hasattr(self.experiment, 'add_hparams'):
+                self.experiment.add_hparams(flatten_hparams, metric_dict={})
 
         # Log into trains
-        if hparams.log.TRAINS_LOGGING:
+        if self.trains_logging_enabled:
             Task.current_task().connect(flatten_hparams)
 
     @rank_zero_only
@@ -122,7 +134,8 @@ class TrainsHydraTestTubeLogger(TestTubeLogger):
                 metrics_for_cli[metric + AVG_SUFFIX] = metrics_for_tt[metric + AVG_SUFFIX] = meters[k].avg.item()
 
         # Log to test-tube
-        self.experiment.log(metrics_for_tt, global_step=step_num)
+        if self.test_tube_logging_enabled:
+            self.experiment.log(metrics_for_tt, global_step=step_num)
 
         # Log to cli
         if log_stage == LogStage.TRAIN_BATCH or log_stage == LogStage.VAL_BATCH:
@@ -156,3 +169,41 @@ class TrainsHydraTestTubeLogger(TestTubeLogger):
     @rank_zero_only
     def info(self, msg):
         logging.info(msg)
+
+
+
+# From: https://medium.com/@rob.blackbourn/how-to-use-python-logging-queuehandler-with-dictconfig-1e8b1284e27a
+
+def _resolve_handlers(l):
+    if not isinstance(l, ConvertingList):
+        return l
+
+    # Indexing the list performs the evaluation.
+    return [l[i] for i in range(len(l))]
+
+
+class QueueListenerHandler(QueueHandler):
+
+    def __init__(self, handlers, respect_handler_level=False, auto_run=True, queue=Queue(QUEUE_SIZE)):
+        super().__init__(queue)
+        handlers = _resolve_handlers(handlers)
+        self._listener = QueueListener(
+            self.queue,
+            *handlers,
+            respect_handler_level=respect_handler_level)
+        if auto_run:
+            self.start()
+            register(self.stop)
+
+
+    def start(self):
+        self._listener.start()
+
+
+    def stop(self):
+        if self._listener._thread is not None:
+            self._listener.stop()
+
+
+    def emit(self, record):
+        return super().emit(record)

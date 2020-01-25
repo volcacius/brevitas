@@ -1,11 +1,12 @@
 import logging
 import os
+import sys
 from pathlib import Path
 
 import hydra
 import torch
 from imagenet_classification import QuantImageNetClassification
-from imagenet_classification.hydra_logger import TrainsHydraTestTubeLogger
+from imagenet_classification.hydra_logger import TrainsHydraTestTubeLogger, QueueListenerHandler
 from imagenet_classification.pl_overrides.pl_callbacks import BestModelCheckpoint
 from imagenet_classification.pl_overrides.pl_trainer import CustomDdpTrainer
 
@@ -28,6 +29,7 @@ def main(hparams):
     task_name = '{}_{}'.format(hparams.NAME_PREFIX, exp_timestamp)
     logger = TrainsHydraTestTubeLogger(save_dir=os.getcwd(),
                                        trains_logging_enabled=hparams.log.TRAINS_LOGGING,
+                                       test_tube_logging_enabled=hparams.log.TEST_TUBE_LOGGING,
                                        trains_project_name=hparams.model.ARCH,
                                        trains_task_name=task_name)
     logger.info(hparams.pretty())
@@ -59,4 +61,11 @@ def main(hparams):
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except:
+        for h in logging.getLogger().handlers:
+            if isinstance(h, QueueListenerHandler):
+                h.stop()
+        raise
+

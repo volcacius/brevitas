@@ -1,4 +1,5 @@
 defaults:
+  - hydra/job_logging: custom_async.yaml
   - misc
   - layers_defaults
   - model: quant_mobilenet_v1_4b
@@ -9,6 +10,7 @@ log:
   INTERVAL: 2
   SAVE_INTERVAL: 10
   TRAINS_LOGGING: False
+  TEST_TUBE_LOGGING: False
 
 TRAIN_BATCH_SIZE: 256
 IS_DISTRIBUTED: False

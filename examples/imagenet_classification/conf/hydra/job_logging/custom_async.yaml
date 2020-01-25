@@ -1,0 +1,26 @@
+hydra:
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(asctime)s]%(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        formatter: simple
+        # relative to the job log directory
+        filename: ${hydra.job.name}.log
+      # From: https://medium.com/@rob.blackbourn/how-to-use-python-logging-queuehandler-with-dictconfig-1e8b1284e27a
+      queue_listener:
+        class: imagenet_classification.hydra_logger.QueueListenerHandler
+        handlers:
+          - cfg://handlers.console
+          - cfg://handlers.file
+    root:
+      level: INFO
+      handlers:
+        - queue_listener
