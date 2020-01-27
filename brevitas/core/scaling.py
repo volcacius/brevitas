@@ -128,8 +128,7 @@ class AffineRescaling(torch.jit.ScriptModule):
         self.affine_bias = Parameter(torch.zeros(affine_shape))
 
     def forward(self, x):
-        out = x * self.affine_weight + self.affine_bias
-        out = torch.abs(out)
+        out = x * torch.abs(self.affine_weight) + torch.abs(self.affine_bias)
         return out
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
@@ -170,8 +169,8 @@ class StatsScaling(torch.jit.ScriptModule):
 
     @torch.jit.script_method
     def forward(self, stats: torch.Tensor) -> torch.Tensor:
-        stats = self.affine_rescaling(stats)
         stats = self.restrict_scaling_preprocess(stats)
+        stats = self.affine_rescaling(stats)
         stats = self.restrict_scaling(stats)
         return stats
 
