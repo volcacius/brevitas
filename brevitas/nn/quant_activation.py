@@ -48,6 +48,7 @@ from brevitas.core.bit_width import BitWidthParameter, BitWidthImplType
 from brevitas.core.function_wrapper import Identity, ConstScalarClamp
 from brevitas.core.quant import QuantType, IdentityQuant
 from brevitas.core.stats import StatsOp
+from brevitas.core.norm import NormImplType
 from brevitas.core.restrict_val import RestrictValueType, FloatToIntImplType
 from brevitas.core.scaling import ScalingImplType, StatsInputViewShapeImpl
 from brevitas.proxy.runtime_quant import ActivationQuantProxy
@@ -96,6 +97,7 @@ class QuantReLU(QuantActivation):
                  max_val: float,
                  quant_type: QuantType = QuantType.FP,
                  float_to_int_impl_type: FloatToIntImplType = FloatToIntImplType.ROUND,
+                 norm_impl_type: NormImplType = NormImplType.MAX,
                  scaling_impl_type: ScalingImplType = ScalingImplType.PARAMETER,
                  scaling_override: Optional[Module] = None,
                  scaling_per_channel: bool = False,
@@ -124,6 +126,7 @@ class QuantReLU(QuantActivation):
                                                     max_val=max_val,
                                                     quant_type=quant_type,
                                                     float_to_int_impl_type=float_to_int_impl_type,
+                                                    norm_impl_type=norm_impl_type,
                                                     scaling_impl_type=scaling_impl_type,
                                                     scaling_per_channel=scaling_per_channel,
                                                     scaling_min_val=scaling_min_val,
@@ -182,7 +185,8 @@ class QuantSigmoid(QuantActivation):
                                                     scaling_stats_sigma=None,
                                                     scaling_stats_op=None,
                                                     scaling_stats_buffer_momentum=None,
-                                                    scaling_stats_permute_dims=None)
+                                                    scaling_stats_permute_dims=None,
+                                                    norm_impl_type=NormImplType.SAME_AS_SCALING)
 
 
 class QuantTanh(QuantActivation):
@@ -226,7 +230,8 @@ class QuantTanh(QuantActivation):
                                                     scaling_stats_sigma=None,
                                                     scaling_stats_op=None,
                                                     scaling_stats_buffer_momentum=None,
-                                                    scaling_stats_permute_dims=None)
+                                                    scaling_stats_permute_dims=None,
+                                                    norm_impl_type=NormImplType.SAME_AS_SCALING)
 
 
 class QuantHardTanh(QuantActivation):
@@ -238,6 +243,7 @@ class QuantHardTanh(QuantActivation):
                  narrow_range: bool = False,
                  quant_type: QuantType = QuantType.FP,
                  float_to_int_impl_type: FloatToIntImplType = FloatToIntImplType.ROUND,
+                 norm_impl_type: NormImplType = NormImplType.MAX,
                  scaling_impl_type: ScalingImplType = ScalingImplType.PARAMETER,
                  scaling_override: Optional[Module] = None,
                  scaling_per_channel: bool = False,
@@ -269,6 +275,7 @@ class QuantHardTanh(QuantActivation):
                                                     max_val=max_val,
                                                     quant_type=quant_type,
                                                     float_to_int_impl_type=float_to_int_impl_type,
+                                                    norm_impl_type=norm_impl_type,
                                                     scaling_impl_type=scaling_impl_type,
                                                     scaling_per_channel=scaling_per_channel,
                                                     scaling_min_val=scaling_min_val,

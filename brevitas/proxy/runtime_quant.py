@@ -54,6 +54,7 @@ from brevitas.core.restrict_val import RestrictValueType, RestrictValue, FloatTo
 from brevitas.core.scaling import RuntimeStatsScaling, SCALING_SCALAR_SHAPE, StatsInputViewShapeImpl
 from brevitas.core.scaling import ScalingImplType, StandaloneScaling, IntScaling
 from brevitas.core.stats import StatsOp
+from brevitas.core.norm import NormImplType, RuntimeMaxNorm
 
 from .quant_proxy import QuantProxy
 
@@ -85,6 +86,7 @@ class ActivationQuantProxy(QuantProxy):
                  max_val: float,
                  quant_type: QuantType,
                  float_to_int_impl_type: FloatToIntImplType,
+                 norm_impl_type: NormImplType,
                  scaling_override: Optional[Module],
                  scaling_impl_type: ScalingImplType,
                  scaling_per_channel: bool,
@@ -193,6 +195,36 @@ class ActivationQuantProxy(QuantProxy):
                     msb_clamp_bit_width_impl = bit_width_impl_override
                     tensor_clamp_impl = TensorClamp()  # if there is an override, it's learned
 
+                if norm_impl_type == NormImplType.MAX or norm_impl_type == NormImplType.MAX_AVE:
+
+                    if scaling_per_channel and not norm_impl_type == NormImplType.MAX_AVE:
+                        norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
+                        norm_stats_reduce_dim = 1
+                        norm_stats_permute_dims = scaling_stats_permute_dims
+                    elif scaling_per_channel and norm_impl_type == NormImplType.MAX_AVE:
+                        raise Exception("Can't do per channel norm with MAX AVE statistics.")
+                    elif not scaling_per_channel and norm_impl_type == NormImplType.MAX_AVE:
+                        norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
+                        norm_stats_reduce_dim = 1
+                        norm_stats_permute_dims = scaling_stats_permute_dims
+                    else:  # not scaling_per_channel
+                        norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_TENSOR
+                        norm_stats_reduce_dim = None
+                        norm_stats_permute_dims = None
+
+                    buffer_init = RescalingIntQuant.scaling_init_from_min_max(min_val, max_val).item()
+                    norm_impl = RuntimeMaxNorm(stats_op=StatsOp(norm_impl_type),
+                                               input_view_shape_impl=norm_stats_input_view_shape_impl,
+                                               reduce_dim=norm_stats_reduce_dim,
+                                               output_shape=scaling_shape,
+                                               buffer_momentum=scaling_stats_buffer_momentum,
+                                               buffer_init=buffer_init,
+                                               permute_dims=norm_stats_permute_dims)
+                elif norm_impl_type == NormImplType.SAME_AS_SCALING:
+                    norm_impl = None
+                else:
+                    raise Exception("Norm impl type {} not supported yet".format(norm_impl_type))
+
                 float_to_int_impl = RestrictValue(restrict_value_type=RestrictValueType.INT,
                                                   float_to_int_impl_type=float_to_int_impl_type,
                                                   min_val=None)
@@ -206,6 +238,7 @@ class ActivationQuantProxy(QuantProxy):
                                                  tensor_clamp_impl=tensor_clamp_impl,
                                                  msb_clamp_bit_width_impl=msb_clamp_bit_width_impl,
                                                  float_to_int_impl=float_to_int_impl,
+                                                 norm_impl=norm_impl,
                                                  runtime=runtime)
             else:
                 raise Exception("Quantization type {} not supported for activations.".format(quant_type))

@@ -57,6 +57,7 @@ SCALING_SCALAR_SHAPE = ()
 class NormImplType(AutoName):
     SAME_AS_SCALING = auto()
     MAX = auto()
+    MAX_AVE = auto()
 
 
 class MaxParameterListNorm(torch.jit.ScriptModule):
@@ -70,6 +71,10 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
             input_concat_dim: int,
             tracked_parameter_list: List[torch.nn.Parameter]):
         assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE)
+
+        if stats_op == StatsOp.MAX_AVE and output_shape != SCALING_SCALAR_SHAPE:
+            raise Exception("Norm with MAX_AVE stats can't be over output channels.")
+
         self.parameter_list_stats = ParameterListStats(
             stats_op=stats_op,
             stats_output_shape=output_shape,
@@ -79,34 +84,36 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
             tracked_parameter_list=tracked_parameter_list,
             sigma=None)
 
-    def forward(self, x: torch.Tensor, zero_hw_sentinel: torch.Tensor):
+    def forward(self, x: torch.Tensor):
         norm = self.parameter_list_stats()
         y = x / norm
         return y
-
 
 
 class RuntimeMaxNorm(torch.jit.ScriptModule):
 
     def __init__(self,
                  stats_op: StatsOp,
-                 stats_input_view_shape_impl: StatsInputViewShapeImpl,
-                 stats_output_shape: Tuple[int, ...],
-                 sigma: Optional[float],
-                 stats_reduce_dim: Optional[int],
-                 stats_permute_dims: Tuple,
-                 stats_buffer_momentum: Optional[float],
-                 stats_buffer_init: float) -> None:
+                 input_view_shape_impl: StatsInputViewShapeImpl,
+                 output_shape: Tuple[int, ...],
+                 reduce_dim: Optional[int],
+                 permute_dims: Tuple,
+                 buffer_momentum: Optional[float],
+                 buffer_init: float) -> None:
         super(RuntimeMaxNorm, self).__init__()
         assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE)
+
+        if stats_op == StatsOp.MAX_AVE and output_shape != SCALING_SCALAR_SHAPE:
+            raise Exception("Norm with MAX_AVE stats can't be over output channels.")
+
         self.runtime_stats = RuntimeStats(stats_op=stats_op,
-                                          stats_output_shape=stats_output_shape,
-                                          stats_reduce_dim=stats_reduce_dim,
-                                          stats_input_view_shape_impl=stats_input_view_shape_impl,
-                                          stats_buffer_momentum=stats_buffer_momentum,
-                                          stats_buffer_init=stats_buffer_init,
-                                          stats_permute_dims=stats_permute_dims,
-                                          sigma=sigma)
+                                          stats_output_shape=output_shape,
+                                          stats_reduce_dim=reduce_dim,
+                                          stats_input_view_shape_impl=input_view_shape_impl,
+                                          stats_buffer_momentum=buffer_momentum,
+                                          stats_buffer_init=buffer_init,
+                                          stats_permute_dims=permute_dims,
+                                          sigma=None)
 
     @torch.jit.script_method
     def forward(self, x: torch.Tensor):
