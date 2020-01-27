@@ -242,10 +242,9 @@ class IntQuant(torch.jit.ScriptModule):
                scale: Tensor,
                int_scale: Tensor,
                msb_clamp_bit_width: Tensor,
-               x: Tensor,
-               zero_hw_sentinel: Tensor) -> Tensor:
+               x: Tensor) -> Tensor:
         if self.norm_impl is not None:
-            y = self.norm_impl(x, zero_hw_sentinel)
+            y = self.norm_impl(x)
         else:
             y = x / scale
         y = y * int_scale
@@ -272,9 +271,8 @@ class IntQuant(torch.jit.ScriptModule):
                 scale: Tensor,
                 int_scale: Tensor,
                 msb_clamp_bit_width: Tensor,
-                x: Tensor,
-                zero_hw_sentinel: Tensor) -> Tensor:
-        y_int = self.to_int(scale, int_scale, msb_clamp_bit_width, x, zero_hw_sentinel)
+                x: Tensor) -> Tensor:
+        y_int = self.to_int(scale, int_scale, msb_clamp_bit_width, x)
         y = y_int / int_scale
         y = y * scale
         return y
