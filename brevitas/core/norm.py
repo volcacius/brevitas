@@ -56,13 +56,7 @@ SCALING_SCALAR_SHAPE = ()
 
 class NormImplType(AutoName):
     SAME_AS_SCALING = auto()
-    MAX = auto()  # infinity norm normalization
-    L2 = auto()  # weight normalization
-    WS = auto()  # weight standardization
-    SN = auto()  # switchable normalization
-    MAX_AVE = auto()
-    L2_AVE = auto()
-    WS_AVE = auto()
+    MAX = auto()
 
 
 class MaxParameterListNorm(torch.jit.ScriptModule):
@@ -87,6 +81,36 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
 
     def forward(self, x: torch.Tensor, zero_hw_sentinel: torch.Tensor):
         norm = self.parameter_list_stats()
+        y = x / norm
+        return y
+
+
+
+class RuntimeMaxNorm(torch.jit.ScriptModule):
+
+    def __init__(self,
+                 stats_op: StatsOp,
+                 stats_input_view_shape_impl: StatsInputViewShapeImpl,
+                 stats_output_shape: Tuple[int, ...],
+                 sigma: Optional[float],
+                 stats_reduce_dim: Optional[int],
+                 stats_permute_dims: Tuple,
+                 stats_buffer_momentum: Optional[float],
+                 stats_buffer_init: float) -> None:
+        super(RuntimeMaxNorm, self).__init__()
+        assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE)
+        self.runtime_stats = RuntimeStats(stats_op=stats_op,
+                                          stats_output_shape=stats_output_shape,
+                                          stats_reduce_dim=stats_reduce_dim,
+                                          stats_input_view_shape_impl=stats_input_view_shape_impl,
+                                          stats_buffer_momentum=stats_buffer_momentum,
+                                          stats_buffer_init=stats_buffer_init,
+                                          stats_permute_dims=stats_permute_dims,
+                                          sigma=sigma)
+
+    @torch.jit.script_method
+    def forward(self, x: torch.Tensor):
+        norm = self.runtime_stats(x)
         y = x / norm
         return y
 
