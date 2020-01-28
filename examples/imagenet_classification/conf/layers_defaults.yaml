@@ -16,6 +16,9 @@ layers_defaults:
     PADDING_TYPE: STANDARD
     PADDING: 0
 
+  linear:
+    WEIGHT_SCALING_STATS_OP: MAX_AVE
+
   quant_act:
     QUANT_TYPE: INT
     SCALING_IMPL_TYPE: PARAMETER

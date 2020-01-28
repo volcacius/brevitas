@@ -21,7 +21,7 @@ class MakeLayerWithDefaults:
         self.make_quant_conv2d = make_layer_with_defaults(
             make_quant_conv2d, [params.quant_weights, params.conv])
         self.make_quant_linear = make_layer_with_defaults(
-            make_quant_linear, [params.quant_weights])
+            make_quant_linear, [params.quant_weights, params.linear])
         self.make_quant_relu = make_layer_with_defaults(
             make_quant_relu, [params.quant_act, params.quant_relu])
         self.make_quant_hard_tanh = make_layer_with_defaults(
