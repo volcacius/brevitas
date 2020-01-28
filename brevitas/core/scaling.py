@@ -202,7 +202,6 @@ class RuntimeStatsScaling(torch.jit.ScriptModule):
         self.stats_scaling_impl = StatsScaling(restrict_scaling_type=restrict_scaling_type,
                                                scaling_min_val=scaling_min_val,
                                                affine=affine,
-                                               stats_op=stats_op,
                                                stats_output_shape=stats_output_shape)
 
     @torch.jit.script_method
