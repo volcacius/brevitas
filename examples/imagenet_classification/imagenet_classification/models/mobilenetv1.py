@@ -157,8 +157,7 @@ class MobileNet(nn.Module):
             num_classes,
             bias=True,
             enable_bias_quant=True,
-            bit_width=bit_width,
-            weight_scaling_per_output_channel=False)
+            bit_width=bit_width)
 
     def forward(self, x):
         quant_tensor = self.features(x)

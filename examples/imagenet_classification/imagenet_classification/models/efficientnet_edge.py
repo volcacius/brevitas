@@ -116,8 +116,7 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             out_channels=num_classes,
             bias=True,
             enable_bias_quant=True,
-            bit_width=bit_width,
-            weight_scaling_per_output_channel=False)
+            bit_width=bit_width)
 
         for n, m in self.named_modules():
             if weight_init == 'goog':

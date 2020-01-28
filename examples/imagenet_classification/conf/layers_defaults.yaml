@@ -18,6 +18,7 @@ layers_defaults:
 
   linear:
     WEIGHT_SCALING_STATS_OP: MAX_AVE
+    WEIGHT_SCALING_PER_OUTPUT_CHANNEL: False
 
   quant_act:
     QUANT_TYPE: INT
