@@ -70,6 +70,7 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
             reduce_dim: Optional[int],
             input_concat_dim: int,
             tracked_parameter_list: List[torch.nn.Parameter]):
+        super(MaxParameterListNorm, self).__init__()
         assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE)
 
         if stats_op == StatsOp.MAX_AVE and output_shape != SCALING_SCALAR_SHAPE:
