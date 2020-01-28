@@ -54,7 +54,7 @@ from brevitas.core.restrict_val import RestrictValueType, RestrictValue, FloatTo
 from brevitas.core.scaling import RuntimeStatsScaling, SCALING_SCALAR_SHAPE, StatsInputViewShapeImpl
 from brevitas.core.scaling import ScalingImplType, StandaloneScaling, IntScaling
 from brevitas.core.stats import StatsOp
-from brevitas.core.norm import NormImplType, RuntimeMaxNorm
+from brevitas.core.norm import NormImplType, RuntimeMaxNorm, SameAsScalingNorm
 
 from .quant_proxy import QuantProxy
 
@@ -221,7 +221,7 @@ class ActivationQuantProxy(QuantProxy):
                                                buffer_init=buffer_init,
                                                permute_dims=norm_stats_permute_dims)
                 elif norm_impl_type == NormImplType.SAME_AS_SCALING:
-                    norm_impl = None
+                    norm_impl = SameAsScalingNorm()
                 else:
                     raise Exception("Norm impl type {} not supported yet".format(norm_impl_type))
 

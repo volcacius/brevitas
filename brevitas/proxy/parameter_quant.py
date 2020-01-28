@@ -59,7 +59,7 @@ from brevitas.core.scaling import ScalingImplType, ParameterStatsScaling, StatsI
 from brevitas.core.scaling import StandaloneScaling, SCALING_SCALAR_SHAPE
 from brevitas.function.ops_ste import round_ste
 from brevitas.core.stats import StatsOp
-from brevitas.core.norm import MaxParameterListNorm, NormImplType
+from brevitas.core.norm import MaxParameterListNorm, NormImplType, SameAsScalingNorm
 from brevitas import config
 from brevitas.config import docstrings
 
@@ -218,7 +218,7 @@ def _weight_quant_init_impl(bit_width: Optional[int],
                                                  reduce_dim=scaling_stats_reduce_dim,
                                                  output_shape=scaling_shape)
             elif norm_impl_type == NormImplType.SAME_AS_SCALING:
-                norm_impl = None
+                norm_impl = SameAsScalingNorm()
             else:
                 raise Exception("Norm impl type {} not supported yet".format(norm_impl_type))
             float_to_int_impl = RestrictValue(restrict_value_type=RestrictValueType.INT,
@@ -322,6 +322,7 @@ class WeightQuantProxy(ParameterQuantProxy):
                  bit_width: Optional[int],
                  quant_type: QuantType,
                  narrow_range: bool,
+                 norm_impl_type: NormImplType,
                  scaling_override: Optional[nn.Module],
                  restrict_scaling_type: RestrictValueType,
                  scaling_const: Optional[float],
@@ -348,6 +349,7 @@ class WeightQuantProxy(ParameterQuantProxy):
                                               bit_width=bit_width,
                                               quant_type=quant_type,
                                               narrow_range=narrow_range,
+                                              norm_impl_type=norm_impl_type,
                                               scaling_override=scaling_override,
                                               restrict_scaling_type=restrict_scaling_type,
                                               scaling_const=scaling_const,

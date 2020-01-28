@@ -84,10 +84,9 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
             tracked_parameter_list=tracked_parameter_list,
             sigma=None)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, s: torch.Tensor):
         norm = self.parameter_list_stats()
-        y = x / norm
-        return y
+        return norm
 
 
 class RuntimeMaxNorm(torch.jit.ScriptModule):
@@ -116,10 +115,16 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                                           sigma=None)
 
     @torch.jit.script_method
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, s: torch.Tensor):
         norm = self.runtime_stats(x)
-        y = x / norm
-        return y
+        return norm
+
+
+class SameAsScalingNorm(torch.jit.ScriptModule):
+
+    @torch.jit.script_method
+    def forward(self, x: torch.Tensor, s: torch.Tensor):
+        return s
 
 
 

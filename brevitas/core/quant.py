@@ -129,8 +129,7 @@ class PrescaledRestrictIntQuantWithInputBitWidth(torch.jit.ScriptModule):
         self.int_quant = IntQuant(signed=signed,
                                   narrow_range=narrow_range,
                                   tensor_clamp_impl=tensor_clamp_impl,
-                                  float_to_int_impl=float_to_int_impl,
-                                  norm_impl=None)
+                                  float_to_int_impl=float_to_int_impl)
         self.msb_clamp_bit_width_impl = msb_clamp_bit_width_impl
 
     @torch.jit.script_method
@@ -140,7 +139,7 @@ class PrescaledRestrictIntQuantWithInputBitWidth(torch.jit.ScriptModule):
                 input_bit_width: Tensor,
                 zero_hw_sentinel: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         msb_clamp_bit_width = self.msb_clamp_bit_width_impl(input_bit_width, zero_hw_sentinel)
-        y = self.int_quant(scale, zero_hw_sentinel + 1, msb_clamp_bit_width, x)
+        y = self.int_quant(scale, scale, zero_hw_sentinel + 1, msb_clamp_bit_width, x)
         return y, scale, msb_clamp_bit_width
 
 
@@ -156,8 +155,7 @@ class PrescaledRestrictIntQuant(torch.jit.ScriptModule):
         self.int_quant = IntQuant(signed=signed,
                                   narrow_range=narrow_range,
                                   tensor_clamp_impl=tensor_clamp_impl,
-                                  float_to_int_impl=float_to_int_impl,
-                                  norm_impl=None)
+                                  float_to_int_impl=float_to_int_impl)
         self.msb_clamp_bit_width_impl = msb_clamp_bit_width_impl
 
     @torch.jit.script_method
@@ -166,7 +164,7 @@ class PrescaledRestrictIntQuant(torch.jit.ScriptModule):
                 scale: Tensor,
                 zero_hw_sentinel: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         msb_clamp_bit_width = self.msb_clamp_bit_width_impl(zero_hw_sentinel)
-        y = self.int_quant(scale, zero_hw_sentinel + 1, msb_clamp_bit_width, x)
+        y = self.int_quant(scale, scale, zero_hw_sentinel + 1, msb_clamp_bit_width, x)
         return y, scale, msb_clamp_bit_width
 
 
@@ -193,13 +191,14 @@ class RescalingIntQuant(torch.jit.ScriptModule):
         super(RescalingIntQuant, self).__init__()
         self.int_quant = IntQuant(signed=signed,
                                   narrow_range=narrow_range,
-                                  norm_impl=norm_impl,
                                   tensor_clamp_impl=tensor_clamp_impl,
                                   float_to_int_impl=float_to_int_impl)
         self.runtime = runtime
         self.scaling_impl = scaling_impl
         self.int_scaling_impl = int_scaling_impl
         self.msb_clamp_bit_width_impl = msb_clamp_bit_width_impl
+        self.norm_impl = norm_impl
+
 
     @staticmethod
     def scaling_init_from_min_max(min_val_init: Union[int, float], max_val_init: Union[int, float]) -> torch.Tensor:
@@ -216,7 +215,8 @@ class RescalingIntQuant(torch.jit.ScriptModule):
         else:
             scale = self.scaling_impl(zero_hw_sentinel)
         int_scale = self.int_scaling_impl(msb_clamp_bit_width)
-        y = self.int_quant(scale, int_scale, msb_clamp_bit_width, x)
+        norm = self.norm_impl(x, scale)
+        y = self.int_quant(norm, scale, int_scale, msb_clamp_bit_width, x)
         output_bit_width = msb_clamp_bit_width
         output_scale = scale / int_scale
         return y, output_scale, output_bit_width
@@ -228,25 +228,20 @@ class IntQuant(torch.jit.ScriptModule):
     def __init__(self,
                  narrow_range: bool,
                  signed: bool,
-                 norm_impl: Optional[Module],
                  float_to_int_impl: Module,
                  tensor_clamp_impl: Module):
         super(IntQuant, self).__init__()
         self.float_to_int_impl = float_to_int_impl
         self.tensor_clamp_impl = tensor_clamp_impl
-        self.norm_impl = norm_impl
         self.signed = signed
         self.narrow_range = narrow_range
 
     def to_int(self,
-               scale: Tensor,
+               norm: Tensor,
                int_scale: Tensor,
                msb_clamp_bit_width: Tensor,
                x: Tensor) -> Tensor:
-        if self.norm_impl is not None:
-            y = self.norm_impl(x)
-        else:
-            y = x / scale
+        y = x / norm
         y = y * int_scale
         min_int_val = self.min_int(msb_clamp_bit_width)
         max_int_val = self.max_int(msb_clamp_bit_width)
@@ -268,11 +263,12 @@ class IntQuant(torch.jit.ScriptModule):
 
     @torch.jit.script_method
     def forward(self,
+                norm: Tensor,
                 scale: Tensor,
                 int_scale: Tensor,
                 msb_clamp_bit_width: Tensor,
                 x: Tensor) -> Tensor:
-        y_int = self.to_int(scale, int_scale, msb_clamp_bit_width, x)
+        y_int = self.to_int(norm, int_scale, msb_clamp_bit_width, x)
         y = y_int / int_scale
         y = y * scale
         return y

@@ -57,6 +57,7 @@ from brevitas.core.scaling import ScalingImplType, SCALING_SCALAR_SHAPE
 from brevitas.core.stats import StatsInputViewShapeImpl, StatsOp
 from brevitas.function.ops import max_uint
 from brevitas.function.ops_ste import ceil_ste
+from brevitas.core.norm import NormImplType
 from brevitas.proxy.parameter_quant import WeightQuantProxy, BiasQuantProxy, WeightReg
 from brevitas.utils.python_utils import AutoName
 from brevitas.nn.quant_bn import mul_add_from_bn
@@ -96,6 +97,7 @@ class QuantConv2d(QuantLayer, Conv2d):
                  weight_quant_override: WeightQuantProxy = None,
                  weight_quant_type: QuantType = QuantType.FP,
                  weight_narrow_range: bool = False,
+                 weight_norm_impl_type: NormImplType = NormImplType.SAME_AS_SCALING,
                  weight_scaling_override: Optional[Module] = None,
                  weight_bit_width_impl_override: Union[BitWidthParameter, BitWidthConst] = None,
                  weight_bit_width_impl_type: BitWidthImplType = BitWidthImplType.CONST,
@@ -159,6 +161,7 @@ class QuantConv2d(QuantLayer, Conv2d):
             self.weight_quant = WeightQuantProxy(bit_width=weight_bit_width,
                                                  quant_type=weight_quant_type,
                                                  narrow_range=weight_narrow_range,
+                                                 norm_impl_type=weight_norm_impl_type,
                                                  scaling_override=weight_scaling_override,
                                                  restrict_scaling_type=weight_restrict_scaling_type,
                                                  scaling_const=weight_scaling_const,
