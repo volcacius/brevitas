@@ -5,6 +5,7 @@ model:
   ARCH: quant_tf_efficientnet_el
   PRETRAINED_MODEL: https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-weights/tf_efficientnet_el-5143854e.pth
   FIRST_LAYER_WEIGHT_BIT_WIDTH: 8
+  LAST_LAYER_WEIGHT_BIT_WIDTH: 8
   BIT_WIDTH: 8
   FIRST_LAYER_PADDING: 1
   FIRST_LAYER_STRIDE: 2

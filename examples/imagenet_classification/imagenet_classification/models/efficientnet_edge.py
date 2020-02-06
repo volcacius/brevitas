@@ -32,6 +32,7 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             first_layer_weight_bit_width,
             first_layer_stride,
             first_layer_padding,
+            last_layer_weight_bit_width,
             scaling_per_channel,
             dw_scaling_per_channel,
             scaling_stats_op,
@@ -116,7 +117,7 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             out_channels=num_classes,
             bias=True,
             enable_bias_quant=True,
-            bit_width=bit_width)
+            bit_width=last_layer_weight_bit_width)
 
         for n, m in self.named_modules():
             if weight_init == 'goog':
@@ -509,6 +510,7 @@ def generic_efficientnet_edge(
         first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
         first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
         first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
+        last_layer_weight_bit_width=hparams.model.LAST_LAYER_WEIGHT_BIT_WIDTH,
         dw_scaling_per_channel=hparams.model.DW_SCALING_PER_CHANNEL,
         scaling_per_channel=hparams.model.SCALING_PER_CHANNEL,
         dw_scaling_stats_op=hparams.model.DW_SCALING_STATS_OP,
