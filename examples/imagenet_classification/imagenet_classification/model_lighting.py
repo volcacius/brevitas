@@ -103,9 +103,9 @@ class QuantImageNetClassification(LightningModule):
 
     def configure_loss(self):
         if self.hparams.LABEL_SMOOTHING > 0.0:
-            self.__loss_fn = LabelSmoothing(self.hparams.LABEL_SMOOTHING)
+            self.loss_fn = LabelSmoothing(self.hparams.LABEL_SMOOTHING)
         else:
-            self.__loss_fn = CrossEntropyLoss()
+            self.loss_fn = CrossEntropyLoss()
         if self.hparams.MAX_AVE_SCALING_REG > 0.0:
             self.max_ave_scaling_reg = MaxAveScalingReg(self.hparams.MAX_AVE_SCALING_REG)
         else:
@@ -143,13 +143,13 @@ class QuantImageNetClassification(LightningModule):
         for k in list(keys):  # list takes a copy of the keys
             state_dict[k.lstrip('model.')] = state_dict.pop(k)
 
-    def loss(self, output, target):
+    def multisample_loss(self, output, target, loss_fn):
         if isinstance(output, tuple):  # supports multi-sample dropout
-            loss = sum((self.__loss_fn(o, target) for o in output))
+            loss = sum((loss_fn(o, target) for o in output))
             loss = loss / len(output)
             output = sum(output) / len(output)
         else:
-            loss = self.__loss_fn(output, target)
+            loss = loss_fn(output, target)
         if self.max_ave_scaling_reg is not None:
             loss += self.max_ave_scaling_reg.loss(self.model)
         return loss, output
@@ -176,7 +176,7 @@ class QuantImageNetClassification(LightningModule):
     def training_step(self, batch, batch_idx):
         images, target = batch
         output = self.model(images)
-        train_loss, output = self.loss(output, target)
+        train_loss, output = self.multisample_loss(output, target, self.loss_fn)
         train_top1, train_top5 = topk_accuracy(output, target, topk=(1, 5))
 
         self.train_loss_meter.update(train_loss.detach())
@@ -207,7 +207,7 @@ class QuantImageNetClassification(LightningModule):
     def validation_step(self, batch, batch_idx):
         images, target = batch
         output = self.model(images)
-        val_loss, output = self.loss(output, target)
+        val_loss, output = self.multisample_loss(output, target, self.loss_fn)
         val_top1, val_top5 = topk_accuracy(output, target, topk=(1, 5))
 
         self.val_loss_meter.update(val_loss.detach(), images.size(0))
