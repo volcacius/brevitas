@@ -32,33 +32,39 @@ from torch import nn
 from torch.nn import Sequential
 
 from . import layers
-from .layers.common import multisample_dropout_classify
+from .layers.common import multisample_dropout_classify, residual_add_drop_connect, MergeBnMixin
 
 
 class DwsConvBlock(nn.Module):
     def __init__(self,
                  in_channels,
                  out_channels,
+                 merge_bn,
                  stride,
                  bit_width,
+                 weight_scaling_per_output_channel,
                  pw_activation_scaling_per_channel=False):
         super(DwsConvBlock, self).__init__()
         self.dw_conv = ConvBlock(
             in_channels=in_channels,
             out_channels=in_channels,
             groups=in_channels,
+            merge_bn=merge_bn,
             kernel_size=3,
             padding=1,
             stride=stride,
             weight_bit_width=bit_width,
-            act_bit_width=bit_width)
+            act_bit_width=bit_width,
+            weight_scaling_per_output_channel=weight_scaling_per_output_channel)
         self.pw_conv = ConvBlock(
             in_channels=in_channels,
             out_channels=out_channels,
+            merge_bn=merge_bn,
             kernel_size=1,
             padding=0,
             weight_bit_width=bit_width,
             act_bit_width=bit_width,
+            weight_scaling_per_output_channel=weight_scaling_per_output_channel,
             activation_scaling_per_channel=pw_activation_scaling_per_channel)
 
     def forward(self, x):
@@ -67,7 +73,7 @@ class DwsConvBlock(nn.Module):
         return x
 
 
-class ConvBlock(nn.Module):
+class ConvBlock(MergeBnMixin, nn.Module):
 
     def __init__(self,
                  in_channels,
@@ -76,9 +82,11 @@ class ConvBlock(nn.Module):
                  weight_bit_width,
                  act_bit_width,
                  padding,
+                 merge_bn,
                  stride=1,
                  groups=1,
                  bn_eps=1e-5,
+                 weight_scaling_per_output_channel=True,
                  activation_scaling_per_channel=False):
         super(ConvBlock, self).__init__()
         self.conv = layers.with_defaults.make_quant_conv2d(
@@ -89,13 +97,17 @@ class ConvBlock(nn.Module):
             padding=padding,
             groups=groups,
             bias=False,
+            weight_scaling_per_output_channel=weight_scaling_per_output_channel,
             bit_width=weight_bit_width)
-        self.bn = nn.BatchNorm2d(num_features=out_channels, eps=bn_eps)
+        self.bn = nn.Identity() if merge_bn else nn.BatchNorm2d(num_features=out_channels, eps=bn_eps)
         self.activation = layers.with_defaults.make_quant_relu(
             bit_width=act_bit_width,
             per_channel_broadcastable_shape=(1, out_channels, 1, 1),
             scaling_per_channel=activation_scaling_per_channel,
             return_quant_tensor=True)
+
+    def conv_bn_tuples(self):
+        return [(self.conv, 'conv', 'bn')]
 
     def forward(self, x):
         x = self.conv(x)
@@ -112,9 +124,11 @@ class MobileNet(nn.Module):
                  first_layer_weight_bit_width,
                  first_layer_padding,
                  first_stage_stride,
+                 scaling_per_channel,
                  bit_width,
                  dropout_rate,
                  dropout_samples,
+                 merge_bn,
                  in_channels=3,
                  num_classes=1000):
         super(MobileNet, self).__init__()
@@ -129,13 +143,14 @@ class MobileNet(nn.Module):
             stride=first_layer_stride,
             padding=first_layer_padding,
             weight_bit_width=first_layer_weight_bit_width,
-            activation_scaling_per_channel=True,
-            act_bit_width=bit_width)
+            activation_scaling_per_channel=scaling_per_channel,
+            act_bit_width=bit_width,
+            merge_bn=merge_bn)
         self.features.add_module('init_block', init_block)
         in_channels = init_block_channels
         for i, channels_per_stage in enumerate(channels[1:]):
             stage = Sequential()
-            pw_activation_scaling_per_channel = i < len(channels[1:]) - 1
+            pw_activation_scaling_per_channel = i < len(channels[1:]) - 1 and scaling_per_channel
             for j, out_channels in enumerate(channels_per_stage):
                 stride = 2 if (j == 0) and ((i != 0) or first_stage_stride) else 1
                 mod = DwsConvBlock(
@@ -143,7 +158,9 @@ class MobileNet(nn.Module):
                     out_channels=out_channels,
                     stride=stride,
                     bit_width=bit_width,
-                    pw_activation_scaling_per_channel=pw_activation_scaling_per_channel)
+                    weight_scaling_per_output_channel=scaling_per_channel,
+                    pw_activation_scaling_per_channel=pw_activation_scaling_per_channel,
+                    merge_bn=merge_bn)
                 stage.add_module('unit{}'.format(j + 1), mod)
                 in_channels = out_channels
             self.features.add_module('stage{}'.format(i + 1), stage)
@@ -185,7 +202,9 @@ def quant_mobilenet_v1(hparams):
         first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
         first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
         first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
+        scaling_per_channel=hparams.model.SCALING_PER_CHANNEL,
         bit_width=hparams.model.BIT_WIDTH,
         dropout_rate=hparams.dropout.RATE,
-        dropout_samples=hparams.dropout.SAMPLES)
+        dropout_samples=hparams.dropout.SAMPLES,
+        merge_bn=hparams.model.MERGE_BN)
     return net
