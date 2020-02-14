@@ -9,6 +9,10 @@ model:
   SCALING_PER_CHANNEL: True
   MERGE_BN: False
 
+dropout:
+  RATE: 0.2
+  SAMPLES: 1
+
 preprocess:
   CROP_SIZE: 224
   RESIZE_RATIO: 0.875
