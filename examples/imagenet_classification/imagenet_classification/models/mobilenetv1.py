@@ -89,6 +89,7 @@ class ConvBlock(MergeBnMixin, nn.Module):
                  weight_scaling_per_output_channel=True,
                  activation_scaling_per_channel=False):
         super(ConvBlock, self).__init__()
+        self.merge_bn = merge_bn
         self.conv = layers.with_defaults.make_quant_conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
