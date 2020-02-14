@@ -45,6 +45,7 @@ from .hydra_logger import *
 from .utils import filter_keys, state_dict_from_url_or_path, topk_accuracy, AverageMeter, lowercase_keys
 
 optim_impl = {
+    'NAG': SGD,
     'SGD': SGD,
     'ADAM': FusedAdam,
     'NOVOGRAD': FusedNovoGrad,
