@@ -143,6 +143,7 @@ class MobileNet(nn.Module):
             stride=first_layer_stride,
             padding=first_layer_padding,
             weight_bit_width=first_layer_weight_bit_width,
+            weight_scaling_per_output_channel=scaling_per_channel,
             activation_scaling_per_channel=scaling_per_channel,
             act_bit_width=bit_width,
             merge_bn=merge_bn)
