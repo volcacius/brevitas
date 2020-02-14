@@ -2,4 +2,5 @@ OPTIMIZER: NAG
 optim_conf:
   LR: 0.001
   WEIGHT_DECAY: 0.0001
+  MOMENTUM: 0.9
   NESTEROV: True
