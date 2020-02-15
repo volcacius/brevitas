@@ -100,6 +100,48 @@ class MergeBnMixin:
             unexpected_keys,
             error_msgs)
 
+
+class TensorNorm(nn.Module):
+    def __init__(self, eps=1e-5, momentum=0.01):
+        super(TensorNorm, self).__init__()
+        self.register_buffer('running_mean', torch.tensor(0))
+        self.register_buffer('running_var', torch.tensor(1))
+        self.eps = eps
+        self.momentum = momentum
+        self.weight = nn.Parameter(torch.tensor(1.0), requires_grad=True)
+        self.bias = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+
+    def forward(self, input):
+        if self.training:
+            mean = input.mean()
+            unbias_var = input.var(unbiased=True)
+            self.running_mean = (1-self.momentum) * self.running_mean + mean.detach() * self.momentum
+            self.running_var = (1-self.momentum) * self.running_var + unbias_var.detach() * self.momentum
+            biased_var = input.var(unbiased=False)
+            inv_std = 1 / (biased_var + self.eps).pow(0.5)
+            output = (input - mean) * inv_std * self.weight + self.bias
+            return output
+        else:
+            return (input - self.running_mean) * (1.0 / (self.running_var+self.eps).pow(0.5)) * self.weight + self.bias
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        weight_key = prefix + 'weight'
+        bias_key = prefix + 'bias'
+        running_mean_key = prefix + 'running_mean'
+        running_var_key = prefix + 'running_var'
+
+        if running_mean_key in state_dict and running_var_key in state_dict:
+            state_dict[running_mean_key] = state_dict[running_mean_key].mean()
+            state_dict[running_var_key] = state_dict[running_var_key].mean()
+        if weight_key in state_dict and bias_key in state_dict:
+            state_dict[bias_key] = state_dict[bias_key].mean()
+            state_dict[weight_key] = state_dict[weight_key].mean()
+        super(TensorNorm, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+                                                                       missing_keys, unexpected_keys, error_msgs)
+
+
+
 def _merge_bn_layers(conv_bn_tuples, bn_eps, prefix, state_dict):
     for conv_mod, conv_name, bn_name, in conv_bn_tuples:
         bn_prefix = prefix + bn_name

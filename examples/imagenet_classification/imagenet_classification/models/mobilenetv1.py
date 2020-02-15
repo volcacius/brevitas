@@ -32,7 +32,7 @@ from torch import nn
 from torch.nn import Sequential
 
 from . import layers
-from .layers.common import multisample_dropout_classify, residual_add_drop_connect, MergeBnMixin
+from .layers.common import multisample_dropout_classify, residual_add_drop_connect, MergeBnMixin, TensorNorm
 
 
 class DwsConvBlock(nn.Module):
@@ -101,7 +101,7 @@ class ConvBlock(MergeBnMixin, nn.Module):
             bias=False,
             weight_scaling_per_output_channel=weight_scaling_per_output_channel,
             bit_width=weight_bit_width)
-        self.bn = nn.Identity() if merge_bn else nn.BatchNorm2d(num_features=out_channels, eps=bn_eps)
+        self.bn = nn.Identity() if merge_bn else TensorNorm(eps=bn_eps)
         self.activation = layers.with_defaults.make_quant_relu(
             bit_width=act_bit_width,
             per_channel_broadcastable_shape=(1, out_channels, 1, 1),
