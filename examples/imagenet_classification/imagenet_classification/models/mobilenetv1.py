@@ -126,7 +126,8 @@ class MobileNet(nn.Module):
                  first_layer_weight_bit_width,
                  first_layer_padding,
                  first_stage_stride,
-                 scaling_per_channel,
+                 weight_scaling_per_channel,
+                 activation_scaling_per_channel,
                  bit_width,
                  dropout_rate,
                  dropout_samples,
@@ -145,15 +146,15 @@ class MobileNet(nn.Module):
             stride=first_layer_stride,
             padding=first_layer_padding,
             weight_bit_width=first_layer_weight_bit_width,
-            weight_scaling_per_output_channel=scaling_per_channel,
-            activation_scaling_per_channel=scaling_per_channel,
+            weight_scaling_per_output_channel=weight_scaling_per_channel,
+            activation_scaling_per_channel=activation_scaling_per_channel,
             act_bit_width=bit_width,
             merge_bn=merge_bn)
         self.features.add_module('init_block', init_block)
         in_channels = init_block_channels
         for i, channels_per_stage in enumerate(channels[1:]):
             stage = Sequential()
-            pw_activation_scaling_per_channel = i < len(channels[1:]) - 1 and scaling_per_channel
+            pw_activation_scaling_per_channel = i < len(channels[1:]) - 1 and activation_scaling_per_channel
             for j, out_channels in enumerate(channels_per_stage):
                 stride = 2 if (j == 0) and ((i != 0) or first_stage_stride) else 1
                 mod = DwsConvBlock(
@@ -161,7 +162,7 @@ class MobileNet(nn.Module):
                     out_channels=out_channels,
                     stride=stride,
                     bit_width=bit_width,
-                    weight_scaling_per_output_channel=scaling_per_channel,
+                    weight_scaling_per_output_channel=weight_scaling_per_channel,
                     pw_activation_scaling_per_channel=pw_activation_scaling_per_channel,
                     merge_bn=merge_bn)
                 stage.add_module('unit{}'.format(j + 1), mod)
@@ -205,7 +206,8 @@ def quant_mobilenet_v1(hparams):
         first_layer_weight_bit_width=hparams.model.FIRST_LAYER_WEIGHT_BIT_WIDTH,
         first_layer_padding=hparams.model.FIRST_LAYER_PADDING,
         first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
-        scaling_per_channel=hparams.model.SCALING_PER_CHANNEL,
+        weight_scaling_per_channel=hparams.model.WEIGHT_SCALING_PER_CHANNEL,
+        activation_scaling_per_channel=hparams.model.ACTIVATION_SCALING_PER_CHANNEL,
         bit_width=hparams.model.BIT_WIDTH,
         dropout_rate=hparams.dropout.RATE,
         dropout_samples=hparams.dropout.SAMPLES,
