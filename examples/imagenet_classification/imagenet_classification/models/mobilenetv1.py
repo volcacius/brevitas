@@ -41,7 +41,8 @@ class DwsConvBlock(nn.Module):
                  out_channels,
                  merge_bn,
                  stride,
-                 bit_width,
+                 weight_bit_width,
+                 activation_bit_width,
                  weight_scaling_per_output_channel,
                  pw_activation_scaling_per_channel=False):
         super(DwsConvBlock, self).__init__()
@@ -53,8 +54,8 @@ class DwsConvBlock(nn.Module):
             kernel_size=3,
             padding=1,
             stride=stride,
-            weight_bit_width=bit_width,
-            act_bit_width=bit_width,
+            weight_bit_width=weight_bit_width,
+            act_bit_width=activation_bit_width,
             weight_scaling_per_output_channel=weight_scaling_per_output_channel)
         self.pw_conv = ConvBlock(
             in_channels=in_channels,
@@ -62,8 +63,8 @@ class DwsConvBlock(nn.Module):
             merge_bn=merge_bn,
             kernel_size=1,
             padding=0,
-            weight_bit_width=bit_width,
-            act_bit_width=bit_width,
+            weight_bit_width=weight_bit_width,
+            activation_bit_width=activation_bit_width,
             weight_scaling_per_output_channel=weight_scaling_per_output_channel,
             activation_scaling_per_channel=pw_activation_scaling_per_channel)
 
@@ -80,7 +81,7 @@ class ConvBlock(MergeBnMixin, nn.Module):
                  out_channels,
                  kernel_size,
                  weight_bit_width,
-                 act_bit_width,
+                 activation_bit_width,
                  padding,
                  merge_bn,
                  stride=1,
@@ -103,7 +104,7 @@ class ConvBlock(MergeBnMixin, nn.Module):
             bit_width=weight_bit_width)
         self.bn = nn.Identity() if merge_bn else nn.BatchNorm2d(num_features=out_channels, eps=bn_eps)
         self.activation = layers.with_defaults.make_quant_relu(
-            bit_width=act_bit_width,
+            bit_width=activation_bit_width,
             per_channel_broadcastable_shape=(1, out_channels, 1, 1),
             scaling_per_channel=activation_scaling_per_channel,
             return_quant_tensor=True)
@@ -128,7 +129,8 @@ class MobileNet(nn.Module):
                  first_stage_stride,
                  weight_scaling_per_channel,
                  activation_scaling_per_channel,
-                 bit_width,
+                 weight_bit_width,
+                 activation_bit_width,
                  dropout_rate,
                  dropout_samples,
                  merge_bn,
@@ -148,7 +150,7 @@ class MobileNet(nn.Module):
             weight_bit_width=first_layer_weight_bit_width,
             weight_scaling_per_output_channel=weight_scaling_per_channel,
             activation_scaling_per_channel=activation_scaling_per_channel,
-            act_bit_width=bit_width,
+            activation_bit_width=weight_bit_width,
             merge_bn=merge_bn)
         self.features.add_module('init_block', init_block)
         in_channels = init_block_channels
@@ -161,7 +163,8 @@ class MobileNet(nn.Module):
                     in_channels=in_channels,
                     out_channels=out_channels,
                     stride=stride,
-                    bit_width=bit_width,
+                    weight_bit_width=weight_bit_width,
+                    activation_bit_width=activation_bit_width,
                     weight_scaling_per_output_channel=weight_scaling_per_channel,
                     pw_activation_scaling_per_channel=pw_activation_scaling_per_channel,
                     merge_bn=merge_bn)
@@ -172,13 +175,13 @@ class MobileNet(nn.Module):
             kernel_size=7,
             stride=1,
             signed=False,
-            bit_width=bit_width)
+            bit_width=activation_bit_width)
         self.output = layers.with_defaults.make_quant_linear(
             in_channels,
             num_classes,
             bias=True,
             enable_bias_quant=True,
-            bit_width=bit_width)
+            bit_width=weight_bit_width)
 
     def forward(self, x):
         quant_tensor = self.features(x)
@@ -208,7 +211,8 @@ def quant_mobilenet_v1(hparams):
         first_layer_stride=hparams.model.FIRST_LAYER_STRIDE,
         weight_scaling_per_channel=hparams.model.WEIGHT_SCALING_PER_CHANNEL,
         activation_scaling_per_channel=hparams.model.ACTIVATION_SCALING_PER_CHANNEL,
-        bit_width=hparams.model.BIT_WIDTH,
+        weight_bit_width=hparams.model.WEIGHT_BIT_WIDTH,
+        activation_bit_width=hparams.model.ACTIVATION_BIT_WIDTH,
         dropout_rate=hparams.dropout.RATE,
         dropout_samples=hparams.dropout.SAMPLES,
         merge_bn=hparams.model.MERGE_BN)
