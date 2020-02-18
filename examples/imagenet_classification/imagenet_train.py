@@ -57,10 +57,6 @@ def main(hparams):
     if hparams.EVALUATE_ONLY:
         trainer.test(model)
     else:
-        if hparams.RESUME_OPTIM:
-            trainer.resume_optim(hparams.model.PRETRAINED_MODEL)
-        if hparams.RESUME_TRAINING_PROGRESS:
-            trainer.resume_training_progress(hparams.model.PRETRAINED_MODEL)
         trainer.fit(model)
 
 

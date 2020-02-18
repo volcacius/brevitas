@@ -36,6 +36,25 @@ class CustomDdpTrainer(Trainer):
         else:
             raise Exception("Can't resume training progress at {}".format(checkpoint_path))
 
+    def restore_weights(self, model):
+
+        # clear cache before restore
+        if self.on_gpu:
+            torch.cuda.empty_cache()
+
+        if model.hparams.RESUME_OPTIM:
+            self.resume_optim(model.hparams.model.PRETRAINED_MODEL)
+        if model.hparams.RESUME_TRAINING_PROGRESS:
+            self.resume_training_progress(model.hparams.model.PRETRAINED_MODEL)
+
+        # wait for all models to restore weights
+        if self.use_ddp:
+            dist.barrier()
+
+        # clear cache after restore
+        if self.on_gpu:
+            torch.cuda.empty_cache()
+
     def fit(self, model):
         if self.use_ddp:
             assert self.num_gpus == 1, 'Only 1 GPU per process supported'
