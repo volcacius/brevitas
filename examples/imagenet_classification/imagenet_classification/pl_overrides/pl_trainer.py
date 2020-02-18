@@ -8,6 +8,32 @@ from pytorch_lightning import Trainer
 
 class CustomDdpTrainer(Trainer):
 
+    def resume_optim(self, checkpoint):
+        if os.path.exists(checkpoint) and checkpoint.lower().endswith('.ckpt'):
+            optimizer_states = checkpoint['optimizer_states']
+            for optimizer, opt_state in zip(self.optimizers, optimizer_states):
+                optimizer.load_state_dict(opt_state)
+                # possibly move to GPU
+                if self.root_gpu is not None:
+                    for state in optimizer.state.values():
+                        for k, v in state.items():
+                            if isinstance(v, torch.Tensor):
+                                state[k] = v.cuda(self.root_gpu)
+            logging.info('Loaded optimizers state at: {}'.format(checkpoint))
+        else:
+            raise Exception("Can't resume optimizers from checkpoint at {}".format(checkpoint))
+
+    def resume_training_progress(self, checkpoint):
+        if os.path.exists(checkpoint) and checkpoint.lower().endswith('.ckpt'):
+            self.global_step = checkpoint['global_step']
+            self.current_epoch = checkpoint['epoch']
+            scheduler_states = checkpoint['lr_schedulers']
+            for scheduler, scheduler_state in zip(self.lr_schedulers, scheduler_states):
+                scheduler.load_state_dict(scheduler_states)
+            logging.info('Loaded training progress at: {}'.format(checkpoint))
+        else:
+            raise Exception("Can't resume training progress at {}".format(checkpoint))
+
     def fit(self, model):
         if self.use_ddp:
             assert self.num_gpus == 1, 'Only 1 GPU per process supported'
