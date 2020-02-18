@@ -58,7 +58,7 @@ def state_dict_from_url_or_path(pretrained_model):
     elif urlparse(pretrained_model).netloc:  # validates the url
         state_dict = torch.hub.load_state_dict_from_url(pretrained_model, map_location='cpu')
     else:
-        raise Exception("Cant' load pretrained model at: {}".format(pretrained_model))
+        raise Exception("Can't load pretrained model at: {}".format(pretrained_model))
     return state_dict
 
 

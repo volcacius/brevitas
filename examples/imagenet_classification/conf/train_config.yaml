@@ -28,6 +28,8 @@ NO_WD:
   - 'scaling'
 
 EVALUATE_ONLY: False
+RESUME_OPTIM: False
+RESUME_TRAINING_PROGRESS: False
 
 
 
