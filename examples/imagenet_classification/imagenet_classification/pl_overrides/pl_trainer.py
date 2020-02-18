@@ -42,10 +42,10 @@ class CustomDdpTrainer(Trainer):
         if self.on_gpu:
             torch.cuda.empty_cache()
 
-        if model.hparams.RESUME_OPTIM:
-            self.resume_optim(model.hparams.model.PRETRAINED_MODEL)
-        if model.hparams.RESUME_TRAINING_PROGRESS:
-            self.resume_training_progress(model.hparams.model.PRETRAINED_MODEL)
+        if self.get_model().hparams.RESUME_OPTIM:
+            self.resume_optim(self.get_model().hparams.model.PRETRAINED_MODEL)
+        if self.get_model().hparams.RESUME_TRAINING_PROGRESS:
+            self.resume_training_progress(self.get_model().hparams.model.PRETRAINED_MODEL)
 
         # wait for all models to restore weights
         if self.use_ddp:
