@@ -55,7 +55,7 @@ class DwsConvBlock(nn.Module):
             padding=1,
             stride=stride,
             weight_bit_width=weight_bit_width,
-            act_bit_width=activation_bit_width,
+            activation_bit_width=activation_bit_width,
             weight_scaling_per_output_channel=weight_scaling_per_output_channel)
         self.pw_conv = ConvBlock(
             in_channels=in_channels,
