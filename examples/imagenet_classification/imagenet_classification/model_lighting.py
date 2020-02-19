@@ -133,7 +133,8 @@ class QuantImageNetClassification(LightningModule):
         state_dict = checkpoint['state_dict']
         keys = state_dict.keys()
         for k in list(keys):  # list takes a copy of the keys
-            state_dict[k.lstrip('model.')] = state_dict.pop(k)
+            if k.startswith('model.'):
+                state_dict[k[len('model.'):]] = state_dict.pop(k)
 
     def loss(self, output, target):
         if isinstance(output, tuple):  # supports multi-sample dropout
