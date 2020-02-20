@@ -99,7 +99,6 @@ class ConvBlock(MergeBnMixin, nn.Module):
             stride=stride,
             padding=padding,
             groups=groups,
-            bias=False,
             weight_scaling_per_output_channel=weight_scaling_per_output_channel,
             bit_width=weight_bit_width)
         self.bn = nn.Identity() if merge_bn else nn.BatchNorm2d(num_features=out_channels, eps=bn_eps)
