@@ -122,6 +122,10 @@ def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
         bn_mean_key = '.'.join([bn_prefix, 'running_mean'])
         bn_var_key = '.'.join([bn_prefix, 'running_var'])
         bn_keys = [bn_weight_key, bn_bias_key, bn_mean_key, bn_var_key]
+        if merge_bn == MergeBn.RESET_STATS:
+            state_dict[bn_mean_key].fill_(0.0)
+            state_dict[bn_var_key].fill_(1.0)
+            return
         if any(i in state_dict for i in bn_keys):
             mul_factor, add_factor = mul_add_from_bn(
                 bn_mean=state_dict[bn_mean_key],
