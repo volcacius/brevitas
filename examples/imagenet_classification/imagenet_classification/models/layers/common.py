@@ -156,7 +156,7 @@ def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
                     state_dict[bn_mean_key] = torch.tensor(0.0)
                     state_dict[bn_var_key] = torch.tensor(1.0)
             elif merge_bn == MergeBn.STATS_ONLY:
-                state_dict[bn_mean_key] = torch.tensor(0.0)
-                state_dict[bn_var_key] = torch.tensor(1.0)
+                state_dict[bn_mean_key].zeros_()
+                state_dict[bn_var_key].ones_()
             else:
                 raise Exception("Merge BN strategy not recognized: {}".format(merge_bn))
