@@ -132,6 +132,7 @@ class AffineRescaling(torch.jit.ScriptModule):
         self.affine_weight = Parameter(torch.ones(affine_shape))
         self.affine_bias = Parameter(torch.zeros(affine_shape))
 
+    @torch.jit.script_method
     def forward(self, x):
         out = x * torch.abs(self.affine_weight) + torch.abs(self.affine_bias)
         return out

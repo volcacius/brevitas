@@ -52,6 +52,7 @@ from .restrict_val import RestrictValue, RestrictValueType, FloatToIntImplType, 
 from .stats import StatsOp, StatsInputViewShapeImpl, ParameterListStats, RuntimeStats
 
 SCALING_SCALAR_SHAPE = ()
+EPS = 1e-22
 
 
 class NormImplType(AutoName):
@@ -61,6 +62,7 @@ class NormImplType(AutoName):
 
 
 class MaxParameterListNorm(torch.jit.ScriptModule):
+    __constants__ = ['eps']
 
     def __init__(
             self,
@@ -75,7 +77,7 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
 
         if stats_op == StatsOp.MAX_AVE and output_shape != SCALING_SCALAR_SHAPE:
             raise Exception("Norm with MAX_AVE stats can't be over output channels.")
-
+        self.eps = EPS
         self.parameter_list_stats = ParameterListStats(
             stats_op=stats_op,
             stats_output_shape=output_shape,
@@ -85,12 +87,15 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
             tracked_parameter_list=tracked_parameter_list,
             sigma=None)
 
+    @torch.jit.script_method
     def forward(self, x: torch.Tensor, s: torch.Tensor):
         norm = self.parameter_list_stats()
+        norm = norm + self.eps
         return norm
 
 
 class RuntimeMaxNorm(torch.jit.ScriptModule):
+    __constants__ = ['eps']
 
     def __init__(self,
                  stats_op: StatsOp,
@@ -105,7 +110,7 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
 
         if stats_op == StatsOp.MAX_AVE and output_shape != SCALING_SCALAR_SHAPE:
             raise Exception("Norm with MAX_AVE stats can't be over output channels.")
-
+        self.eps = EPS
         self.runtime_stats = RuntimeStats(stats_op=stats_op,
                                           stats_output_shape=output_shape,
                                           stats_reduce_dim=reduce_dim,
@@ -118,6 +123,7 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
     @torch.jit.script_method
     def forward(self, x: torch.Tensor, s: torch.Tensor):
         norm = self.runtime_stats(x)
+        norm = norm + self.eps
         return norm
 
 
