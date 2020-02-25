@@ -32,6 +32,7 @@ class MergeBn(AutoName):
     ALL_REINIT_PER_CHANNEL = auto()
     ALL_REINIT_PER_TENSOR = auto()
     ALL_REINIT_PER_TENSOR_AVE = auto()
+    RESET_STATS = auto()
     STATS_ONLY = auto()
 
 
