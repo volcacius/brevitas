@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 from abc import ABCMeta, abstractmethod
+from enum import auto
 
 import torch
 import torch.nn.functional as F
@@ -22,6 +23,16 @@ import torch.nn as nn
 
 from brevitas.quant_tensor import pack_quant_tensor
 from brevitas.nn.quant_bn import mul_add_from_bn
+
+from brevitas.utils.python_utils import AutoName
+
+
+class MergeBn(AutoName):
+    ALL_TO_IDENTITY = auto()
+    ALL_TO_PER_TENSOR = auto()
+    ALL_TO_PER_TENSOR_AVE = auto()
+    STATS_ONLY = auto()
+
 
 def drop_connect(inputs, training: bool = False, drop_connect_rate: float = 0.):
     """Apply drop connect."""
@@ -85,8 +96,9 @@ class MergeBnMixin:
             missing_keys,
             unexpected_keys,
             error_msgs):
-        if self.merge_bn:
+        if self.merge_bn is not None:
             _merge_bn_layers(
+                self.merge_bn,
                 conv_bn_tuples=self.conv_bn_tuples(),
                 bn_eps=self.bn_eps,
                 prefix=prefix,
@@ -100,7 +112,8 @@ class MergeBnMixin:
             unexpected_keys,
             error_msgs)
 
-def _merge_bn_layers(conv_bn_tuples, bn_eps, prefix, state_dict):
+
+def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
     for conv_mod, conv_name, bn_name, in conv_bn_tuples:
         bn_prefix = prefix + bn_name
         bn_weight_key = '.'.join([bn_prefix, 'weight'])
@@ -115,7 +128,7 @@ def _merge_bn_layers(conv_bn_tuples, bn_eps, prefix, state_dict):
                 bn_eps=bn_eps,
                 bn_weight=state_dict[bn_weight_key],
                 bn_bias=state_dict[bn_bias_key],
-                affine_only=False)
+                stats_only=merge_bn==MergeBn.STATS_ONLY)
             mul_shape = conv_mod.per_output_channel_broadcastable_shape
             conv_weight_key = prefix + conv_name + '.weight'
             conv_bias_key = prefix + conv_name + '.bias'
@@ -131,6 +144,19 @@ def _merge_bn_layers(conv_bn_tuples, bn_eps, prefix, state_dict):
                 state_dict[conv_bias_key] = add_factor
 
             # Get rid of statistics after using them
-            for k in list(state_dict.keys()):
-                if k.startswith(bn_prefix):
-                    del state_dict[k]
+            if merge_bn == MergeBn.ALL_TO_IDENTITY or \
+                    merge_bn == MergeBn.ALL_TO_PER_TENSOR or \
+                    merge_bn == MergeBn.ALL_TO_PER_TENSOR_AVE:
+                for k in list(state_dict.keys()):
+                    if k.startswith(bn_prefix):
+                        del state_dict[k]
+                if merge_bn == MergeBn.ALL_TO_PER_TENSOR or merge_bn == MergeBn.ALL_TO_PER_TENSOR_AVE:
+                    state_dict[bn_weight_key] = torch.tensor(1.0)
+                    state_dict[bn_bias_key] = torch.tensor(0.0)
+                    state_dict[bn_mean_key] = torch.tensor(0.0)
+                    state_dict[bn_var_key] = torch.tensor(1.0)
+            elif merge_bn == MergeBn.STATS_ONLY:
+                state_dict[bn_mean_key] = torch.tensor(0.0)
+                state_dict[bn_var_key] = torch.tensor(1.0)
+            else:
+                raise Exception("Merge BN strategy not recognized: {}".format(merge_bn))

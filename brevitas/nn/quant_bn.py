@@ -12,14 +12,13 @@ from brevitas.nn.quant_layer import SCALING_MIN_VAL
 from .quant_scale_bias import QuantScaleBias
 
 
-def mul_add_from_bn(bn_mean, bn_var, bn_eps, bn_weight, bn_bias, affine_only):
-    mul_factor = bn_weight
-    add_factor = bn_bias * torch.sqrt(bn_var + bn_eps)
-    add_factor = add_factor - bn_mean * (bn_weight - 1.0)
-    if not affine_only:
-        mul_factor = mul_factor / torch.sqrt(bn_var + bn_eps)
-        add_factor = add_factor - bn_mean
-        add_factor = add_factor / torch.sqrt(bn_var + bn_eps)
+def mul_add_from_bn(bn_mean, bn_var, bn_eps, bn_weight, bn_bias, stats_only):
+    mul_factor = 1.0 / torch.sqrt(bn_var + bn_eps)
+    add_factor = - bn_mean
+    if not stats_only:
+        add_factor = add_factor + bn_bias * torch.sqrt(bn_var + bn_eps) - bn_mean * (bn_weight - 1.0)
+        mul_factor = mul_factor * bn_weight
+    add_factor = add_factor / torch.sqrt(bn_var + bn_eps)
     return mul_factor, add_factor
 
 
