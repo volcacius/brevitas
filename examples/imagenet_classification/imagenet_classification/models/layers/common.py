@@ -159,7 +159,7 @@ def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
             elif merge_bn == MergeBn.STATS_ONLY:
                 state_dict[bn_mean_key].fill_(0.0)
                 state_dict[bn_var_key].fill_(1.0)
-            if merge_bn == MergeBn.ALL_REINIT_PER_CHANNEL:
+            elif merge_bn == MergeBn.ALL_REINIT_PER_CHANNEL:
                 state_dict[bn_weight_key].fill_(1.0)
                 state_dict[bn_bias_key].fill_(0.0)
                 state_dict[bn_mean_key].fill_(0.0)
