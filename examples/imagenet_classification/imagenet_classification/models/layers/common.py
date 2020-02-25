@@ -29,8 +29,9 @@ from brevitas.utils.python_utils import AutoName
 
 class MergeBn(AutoName):
     ALL_TO_IDENTITY = auto()
-    ALL_TO_PER_TENSOR = auto()
-    ALL_TO_PER_TENSOR_AVE = auto()
+    ALL_REINIT_PER_CHANNEL = auto()
+    ALL_REINIT_PER_TENSOR = auto()
+    ALL_REINIT_PER_TENSOR_AVE = auto()
     STATS_ONLY = auto()
 
 
@@ -145,17 +146,22 @@ def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
 
             # Get rid of statistics after using them
             if merge_bn == MergeBn.ALL_TO_IDENTITY or \
-                    merge_bn == MergeBn.ALL_TO_PER_TENSOR or \
-                    merge_bn == MergeBn.ALL_TO_PER_TENSOR_AVE:
+                    merge_bn == MergeBn.ALL_REINIT_PER_TENSOR or \
+                    merge_bn == MergeBn.ALL_REINIT_PER_TENSOR_AVE:
                 for k in list(state_dict.keys()):
                     if k.startswith(bn_prefix):
                         del state_dict[k]
-                if merge_bn == MergeBn.ALL_TO_PER_TENSOR or merge_bn == MergeBn.ALL_TO_PER_TENSOR_AVE:
+                if merge_bn == MergeBn.ALL_REINIT_PER_TENSOR or merge_bn == MergeBn.ALL_REINIT_PER_TENSOR_AVE:
                     state_dict[bn_weight_key] = torch.tensor(1.0)
                     state_dict[bn_bias_key] = torch.tensor(0.0)
                     state_dict[bn_mean_key] = torch.tensor(0.0)
                     state_dict[bn_var_key] = torch.tensor(1.0)
             elif merge_bn == MergeBn.STATS_ONLY:
+                state_dict[bn_mean_key].fill_(0.0)
+                state_dict[bn_var_key].fill_(1.0)
+            if merge_bn == MergeBn.ALL_REINIT_PER_CHANNEL:
+                state_dict[bn_weight_key].fill_(1.0)
+                state_dict[bn_bias_key].fill_(0.0)
                 state_dict[bn_mean_key].fill_(0.0)
                 state_dict[bn_var_key].fill_(1.0)
             else:

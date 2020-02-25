@@ -81,11 +81,11 @@ class TensorBatchNorm2d(nn.Module):
 def make_bn(merge_bn, features, eps):
     if merge_bn == MergeBn.ALL_TO_IDENTITY:
         return nn.Identity()
-    elif merge_bn == MergeBn.STATS_ONLY or merge_bn is None:
+    elif merge_bn == MergeBn.ALL_REINIT_PER_CHANNEL or merge_bn == MergeBn.STATS_ONLY or merge_bn is None:
         return nn.BatchNorm2d(features, eps)
-    elif merge_bn == MergeBn.ALL_TO_PER_TENSOR:
+    elif merge_bn == MergeBn.ALL_REINIT_PER_TENSOR:
         return TensorBatchNorm2d(eps, var_ave=False)
-    elif merge_bn == MergeBn.ALL_TO_PER_TENSOR_AVE:
+    elif merge_bn == MergeBn.ALL_REINIT_PER_TENSOR_AVE:
         return TensorBatchNorm2d(eps, var_ave=True)
     else:
         raise Exception("Merge BN strategy not recognized: {}".format(merge_bn))
