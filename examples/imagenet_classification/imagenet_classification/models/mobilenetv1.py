@@ -180,7 +180,6 @@ class MobileNet(nn.Module):
             in_channels,
             num_classes,
             bias=True,
-            enable_bias_quant=True,
             bit_width=weight_bit_width)
 
     def forward(self, x):

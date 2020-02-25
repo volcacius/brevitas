@@ -6,7 +6,6 @@ layers_defaults:
     WEIGHT_QUANT_TYPE: INT
     WEIGHT_SCALING_MIN_VAL: 2e-16
     WEIGHT_NARROW_RANGE: True
-    ENABLE_BIAS_QUANT: False
 
   conv:
     WEIGHT_SCALING_IMPL_TYPE: STATS
@@ -17,6 +16,7 @@ layers_defaults:
     PADDING_TYPE: STANDARD
     PADDING: 0
     BIAS: False
+    ENABLE_BIAS_QUANT: False
 
   linear:
     WEIGHT_SCALING_IMPL_TYPE: STATS
@@ -25,6 +25,7 @@ layers_defaults:
     WEIGHT_NORM_IMPL_TYPE: SAME_AS_SCALING
     WEIGHT_RESTRICT_SCALING_TYPE: LOG_FP
     BIAS: True
+    ENABLE_BIAS_QUANT: True
 
   quant_act:
     QUANT_TYPE: INT
