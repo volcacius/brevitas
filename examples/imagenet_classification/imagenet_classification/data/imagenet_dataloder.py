@@ -67,7 +67,7 @@ def imagenet_val_loader(data_path,
     val_loader = DataLoader(val_dataset,
                             sampler=None,
                             batch_size=batch_size,
-                            shuffle=False,
+                            shuffle=True,
                             num_workers=workers,
                             pin_memory=True)
     return val_loader

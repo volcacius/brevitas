@@ -200,6 +200,7 @@ class QuantImageNetClassification(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         images, target = batch
+        self.model.train()
         output = self.model(images)
         val_loss, output = self.loss(output, target)
         val_top1, val_top5 = topk_accuracy(output, target, topk=(1, 5))
