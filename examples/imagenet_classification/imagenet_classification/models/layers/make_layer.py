@@ -116,8 +116,8 @@ class LogBatchNorm2d(nn.Module):
             missing_keys,
             unexpected_keys,
             error_msgs):
-        bn_var_key = '.'.join([prefix, 'running_var'])
-        bn_log_var_key = '.'.join([prefix, 'running_log_var'])
+        bn_var_key = prefix + 'running_var'
+        bn_log_var_key = prefix + 'running_log_var'
         state_dict[bn_log_var_key] = torch.log2(state_dict[bn_var_key])
         del state_dict[bn_var_key]
         super(LogBatchNorm2d, self)._load_from_state_dict(
