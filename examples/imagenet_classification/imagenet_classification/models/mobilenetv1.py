@@ -88,6 +88,7 @@ class ConvBlock(MergeBnMixin, nn.Module):
                  stride=1,
                  groups=1,
                  bn_eps=1e-5,
+                 bn_momentum=0.9,
                  weight_scaling_per_output_channel=True,
                  activation_scaling_per_channel=False):
         super(ConvBlock, self).__init__()
@@ -102,7 +103,7 @@ class ConvBlock(MergeBnMixin, nn.Module):
             groups=groups,
             weight_scaling_per_output_channel=weight_scaling_per_output_channel,
             bit_width=weight_bit_width)
-        self.bn = make_bn(merge_bn=merge_bn, features=out_channels, eps=bn_eps)
+        self.bn = make_bn(merge_bn=merge_bn, features=out_channels, eps=bn_eps, momentum=bn_momentum)
         self.activation = layers.with_defaults.make_quant_relu(
             bit_width=activation_bit_width,
             per_channel_broadcastable_shape=(1, out_channels, 1, 1),

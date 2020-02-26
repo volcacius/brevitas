@@ -34,6 +34,7 @@ class MergeBn(AutoName):
     ALL_REINIT_PER_TENSOR_AVE = auto()
     RESET_STATS = auto()
     STATS_ONLY = auto()
+    LOG_BN = auto()
 
 
 def drop_connect(inputs, training: bool = False, drop_connect_rate: float = 0.):
@@ -126,6 +127,8 @@ def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
         if merge_bn == MergeBn.RESET_STATS:
             state_dict[bn_mean_key].fill_(0.0)
             state_dict[bn_var_key].fill_(1.0)
+            return
+        if merge_bn == MergeBn.LOG_BN:
             return
         if any(i in state_dict for i in bn_keys):
             mul_factor, add_factor = mul_add_from_bn(
