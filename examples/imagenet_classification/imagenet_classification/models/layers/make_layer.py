@@ -120,9 +120,12 @@ class LogBatchNorm2d(torch.jit.ScriptModule):
             error_msgs):
         bn_var_key = prefix + 'running_var'
         bn_log_var_key = prefix + 'running_log_var'
-        state_dict[bn_log_var_key] = torch.log2(state_dict[bn_var_key])
-        del state_dict[bn_var_key]
-        del state_dict[prefix + 'num_batches_tracked']
+        bn_batches_tracked_key = prefix + 'num_batches_tracked'
+        if bn_var_key in state_dict:
+            state_dict[bn_log_var_key] = torch.log2(state_dict[bn_var_key])
+            del state_dict[bn_var_key]
+        if bn_batches_tracked_key:
+            del state_dict[bn_batches_tracked_key]
         super(LogBatchNorm2d, self)._load_from_state_dict(
             state_dict,
             prefix,
