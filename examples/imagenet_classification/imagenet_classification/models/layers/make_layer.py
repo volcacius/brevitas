@@ -103,7 +103,7 @@ class LogBatchNorm2d(nn.Module):
             inv_std = 1.0 / (biased_var + self.eps).pow(0.5)
             output = (input_ - mean) * inv_std * self.weight + self.bias
         else:
-            inv_std = 1.0 / (2.0 ** self.running_var + self.eps).pow(0.5)
+            inv_std = 1.0 / (2.0 ** self.running_log_var + self.eps).pow(0.5)
             output = (input_ - self.running_mean) * inv_std * self.weight + self.bias
         return output
 
