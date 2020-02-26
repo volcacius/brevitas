@@ -79,7 +79,8 @@ class TensorBatchNorm2d(nn.Module):
         return output
 
 
-class LogBatchNorm2d(nn.Module):
+class LogBatchNorm2d(torch.jit.ScriptModule):
+    __constants__ = ['momentum', 'eps']
 
     def __init__(self, features, eps, momentum):
         super(LogBatchNorm2d, self).__init__()
@@ -90,6 +91,7 @@ class LogBatchNorm2d(nn.Module):
         self.register_buffer('running_mean', torch.empty(features).fill_(0.0))
         self.register_buffer('running_log_var', torch.empty(features).fill_(0.0))
 
+    @torch.jit.script_method
     def forward(self, input_):
         batchsize, channels, height, width = input_.size()
         numel = batchsize * height * width
