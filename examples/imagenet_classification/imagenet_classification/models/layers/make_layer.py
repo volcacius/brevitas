@@ -95,7 +95,7 @@ class LogBatchNorm2d(nn.Module):
         numel = batchsize * height * width
         permuted_input_ = input_.permute(1, 0, 2, 3).contiguous().view(channels, numel)
         if self.training:
-            mean = input_.mean(dim=1)
+            mean = permuted_input_.mean(dim=1)
             biased_var = permuted_input_.var(dim=1, unbiased=False)
             unbiased_var = permuted_input_.var(dim=1, unbiased=True)
             self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * (mean.detach())
@@ -103,8 +103,8 @@ class LogBatchNorm2d(nn.Module):
             inv_std = 1.0 / (biased_var + self.eps).pow(0.5)
             output = (input_ - mean) * inv_std * self.weight + self.bias
         else:
-            inv_std = 1.0 / (2.0 ** self.running_log_var + self.eps).pow(0.5)
-            output = (input_ - self.running_mean) * inv_std * self.weight + self.bias
+            inv_std = 1.0 / (2.0 ** self.running_log_var.view(1, -1, 1, 1) + self.eps).pow(0.5)
+            output = (input_ - self.running_mean.view(1, -1, 1, 1)) * inv_std * self.weight + self.bias
         return output
 
     def _load_from_state_dict(
