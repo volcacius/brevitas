@@ -124,7 +124,7 @@ class LogBatchNorm2d(torch.jit.ScriptModule):
         if bn_var_key in state_dict:
             state_dict[bn_log_var_key] = torch.log2(state_dict[bn_var_key])
             del state_dict[bn_var_key]
-        if bn_batches_tracked_key:
+        if bn_batches_tracked_key in state_dict:
             del state_dict[bn_batches_tracked_key]
         super(LogBatchNorm2d, self)._load_from_state_dict(
             state_dict,
