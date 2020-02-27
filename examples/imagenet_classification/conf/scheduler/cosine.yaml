@@ -1,0 +1,4 @@
+SCHEDULER: COSINE
+scheduler_conf:
+  T_MAX: ${EPOCHS}
+  LR_MIN: 0.0

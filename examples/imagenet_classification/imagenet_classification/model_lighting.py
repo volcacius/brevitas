@@ -52,7 +52,7 @@ optim_impl = {
     'RMSPROPTF': RMSpropTF}
 
 scheduler_impl = {
-    'COSINE': lambda t_max: partial(CosineAnnealingLR, T_max=t_max),  # normalize case
+    'COSINE': lambda optim, t_max, lr_min: CosineAnnealingLR(optim, T_max=t_max, eta_min=lr_min),
     'MULTISTEP': MultiStepLR}
 
 
