@@ -28,15 +28,19 @@ SOFTWARE.
 
 __all__ = ['quant_mobilenet_v1']
 
+import torch
 from torch import nn
 from torch.nn import Sequential
 
+from brevitas.core import ZERO_HW_SENTINEL_NAME
 from brevitas.quant_tensor import pack_quant_tensor
 
 from .common import make_quant_conv2d, make_quant_linear, make_quant_relu, make_quant_avg_pool
+from .export_utils import *
 
 
 FIRST_LAYER_BIT_WIDTH = 8
+EXPORT = True
 
 
 class DwsConvBlock(nn.Module):
@@ -62,6 +66,12 @@ class DwsConvBlock(nn.Module):
                                  weight_bit_width=bit_width,
                                  act_bit_width=bit_width,
                                  activation_scaling_per_channel=pw_activation_scaling_per_channel)
+
+    def export(self, name_prefix):
+        export_list = []
+        export_list.extend(self.dw_conv.export(name_prefix + '_dw'))
+        export_list.extend(self.pw_conv.export(name_prefix + '_pw'))
+        return export_list
 
     def forward(self, x):
         x = self.dw_conv(x)
@@ -96,11 +106,57 @@ class ConvBlock(nn.Module):
                                           per_channel_broadcastable_shape=(1, out_channels, 1, 1),
                                           scaling_per_channel=activation_scaling_per_channel,
                                           return_quant_tensor=True)
+        self.input_2d_shape = None
+        self.output_2d_shape = None
+        self.acc_scale = None
+        self.acc_bit_width = None
+        self.output_bit_width = None
+
+    def export(self, name_prefix):
+        factors_tuple = scale_bias_fusion(
+            self.bn,
+            scale_factor_init=self.acc_scale,
+            bias_factor_init=self.conv.bias if self.conv.bias else 0.0)
+        acc_scale_factor, acc_bias_factor, weight_sign_factor = factors_tuple
+        # Threshold
+        threshold = hls_threshold_string(
+            self.activation,
+            hls_var_name='{}threshold'.format(name_prefix.lower()),
+            acc_bit_width=self.acc_bit_width,
+            acc_scale_factor=acc_scale_factor,
+            acc_bias_factor=acc_bias_factor,
+            output_bit_width=self.output_bit_width)
+        # Weight
+        weight_bit_width_impl = self.conv.weight_quant.tensor_quant.msb_clamp_bit_width_impl
+        weight_bit_width = weight_bit_width_impl(getattr(self.conv.weight_quant, ZERO_HW_SENTINEL_NAME))
+        weight_bit_width = weight_bit_width.int().item()
+        conv_weight = hls_weight_string(
+            self.conv,
+            weight_bit_width=weight_bit_width,
+            hls_var_name='{}weight'.format(name_prefix.lower()),
+            sign_factor=weight_sign_factor)
+        # Config
+        config_list = hls_config_string(
+            self.conv,
+            name_prefix.upper(),
+            weight_bit_width=weight_bit_width,
+            input_2d_shape=self.input_2d_shape,
+            output_2d_shape=self.output_2d_shape)
+        # Return as a list of a single tuple
+        export_tuple = conv_weight, threshold, config_list
+        return [export_tuple]
 
     def forward(self, x):
-        x = self.conv(x)
+        input_shape = x.tensor.shape
+        x, acc_scale, acc_bit_width = self.conv(x)
         x = self.bn(x)
         x = self.activation(x)
+        if EXPORT:
+            self.input_2d_shape = (input_shape[2], input_shape[3])
+            self.acc_scale = acc_scale.detach()
+            self.acc_bit_width = acc_bit_width.int().item()
+            self.output_bit_width = x.bit_width.int().item()
+            self.output_2d_shape = (x.tensor.shape[2], x.tensor.shape[3])
         return x
 
 
@@ -148,7 +204,21 @@ class MobileNet(nn.Module):
                                         bit_width=bit_width,
                                         weight_scaling_per_output_channel=False)
 
+    def export(self, input_sample):
+        self.eval()
+        with torch.no_grad():
+            self.forward(input_sample)
+        export_list = []
+        export_list.extend(self.features[0].export(name_prefix='conv0'))
+        for i, stage in enumerate(self.features[1:]):
+            for j, block in enumerate(stage):
+                name_prefix = 'layer{}_block{}'.format(i, j)
+                export_list.extend(block.export(name_prefix=name_prefix))
+        weight_list, threshold_list, config_list = zip(*export_list)
+        return weight_list, threshold_list, config_list
+
     def forward(self, x):
+        x = pack_quant_tensor(x, torch.tensor(0.226).to(x.device), torch.tensor(8.0).to(x.device))
         quant_tensor = self.features(x)
         x, scale, bit_width = self.final_pool(quant_tensor)
         x = x.view(x.size(0), -1)
