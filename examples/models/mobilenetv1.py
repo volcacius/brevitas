@@ -121,7 +121,7 @@ class ConvBlock(nn.Module):
         # Threshold
         threshold = hls_threshold_string(
             self.activation,
-            hls_var_name='{}threshold'.format(name_prefix.lower()),
+            hls_var_name='{}_threshold'.format(name_prefix.lower()),
             acc_bit_width=self.acc_bit_width,
             acc_scale_factor=acc_scale_factor,
             acc_bias_factor=acc_bias_factor,
@@ -133,7 +133,7 @@ class ConvBlock(nn.Module):
         conv_weight = hls_weight_string(
             self.conv,
             weight_bit_width=weight_bit_width,
-            hls_var_name='{}weight'.format(name_prefix.lower()),
+            hls_var_name='{}_weight'.format(name_prefix.lower()),
             sign_factor=weight_sign_factor)
         # Config
         config_list = hls_config_string(
