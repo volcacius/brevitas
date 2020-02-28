@@ -160,16 +160,16 @@ def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
                     if k.startswith(bn_prefix):
                         del state_dict[k]
                 if merge_bn == MergeBn.ALL_REINIT_PER_TENSOR or merge_bn == MergeBn.ALL_REINIT_PER_TENSOR_AVE:
-                    state_dict[bn_weight_key] = torch.tensor(1.0)
-                    state_dict[bn_bias_key] = torch.tensor(0.0)
+                    state_dict[bn_weight_key] = torch.mean(torch.sqrt(state_dict[bn_var_key] + bn_eps))
+                    state_dict[bn_bias_key] = torch.mean(state_dict[bn_mean_key])
                     state_dict[bn_mean_key] = torch.tensor(0.0)
                     state_dict[bn_var_key] = torch.tensor(1.0)
             elif merge_bn == MergeBn.STATS_ONLY:
                 state_dict[bn_mean_key].fill_(0.0)
                 state_dict[bn_var_key].fill_(1.0)
             elif merge_bn == MergeBn.ALL_REINIT_PER_CHANNEL:
-                state_dict[bn_weight_key].fill_(1.0)
-                state_dict[bn_bias_key].fill_(0.0)
+                state_dict[bn_weight_key] = torch.sqrt(state_dict[bn_var_key] + bn_eps)
+                state_dict[bn_bias_key] = state_dict[bn_mean_key]
                 state_dict[bn_mean_key].fill_(0.0)
                 state_dict[bn_var_key].fill_(1.0)
             else:
