@@ -50,11 +50,10 @@ def main():
     pretrained_url = cfg.get('MODEL', 'PRETRAINED_URL')
     print("=> Loading checkpoint from:'{}'".format(pretrained_url))
     if args.gpu is None:
-        checkpoint = torch.hub.load_state_dict_from_url(pretrained_url)
+        loc = 'cpu'
     else:
-        # Map model to be loaded to specified single gpu.
         loc = 'cuda:{}'.format(args.gpu)
-        checkpoint = torch.hub.load_state_dict_from_url(pretrained_url, map_location=loc)
+    checkpoint = torch.hub.load_state_dict_from_url(pretrained_url, map_location=loc)
     model.load_state_dict(checkpoint, strict=True)
 
     if args.export:
