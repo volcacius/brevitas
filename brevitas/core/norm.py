@@ -59,6 +59,7 @@ class NormImplType(AutoName):
     SAME_AS_SCALING = auto()
     MAX = auto()
     MAX_AVE = auto()
+    MAX_L2 = auto()
 
 
 class MaxParameterListNorm(torch.jit.ScriptModule):
@@ -73,10 +74,10 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
             input_concat_dim: int,
             tracked_parameter_list: List[torch.nn.Parameter]):
         super(MaxParameterListNorm, self).__init__()
-        assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE)
+        assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2)
 
-        if stats_op == StatsOp.MAX_AVE and output_shape != SCALING_SCALAR_SHAPE:
-            raise Exception("Norm with MAX_AVE stats can't be over output channels.")
+        if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and output_shape != SCALING_SCALAR_SHAPE:
+            raise Exception("Norm with MAX_AVE/MAX_L2 stats can't be over output channels.")
         self.eps = EPS
         self.parameter_list_stats = ParameterListStats(
             stats_op=stats_op,

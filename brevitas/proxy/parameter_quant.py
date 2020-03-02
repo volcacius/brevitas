@@ -209,7 +209,9 @@ def _weight_quant_init_impl(bit_width: Optional[int],
                 tensor_clamp_impl = TensorClamp()
             else:
                 tensor_clamp_impl = TensorClampSte()
-            if norm_impl_type == NormImplType.MAX or norm_impl_type == NormImplType.MAX_AVE:
+            if norm_impl_type == NormImplType.MAX or \
+                    norm_impl_type == NormImplType.MAX_AVE or \
+                    norm_impl_type == NormImplType.MAX_L2:
                 norm_impl = MaxParameterListNorm(stats_op=StatsOp(norm_impl_type),
                                                  tracked_parameter_list=tracked_parameter_list,
                                                  input_view_shape_impl=scaling_stats_input_view_shape_impl,

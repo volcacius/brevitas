@@ -231,8 +231,8 @@ class ParameterStatsScaling(torch.jit.ScriptModule):
                  affine: bool) -> None:
         super(ParameterStatsScaling, self).__init__()
 
-        if stats_op == StatsOp.MAX_AVE and stats_output_shape != SCALING_SCALAR_SHAPE:
-            raise Exception("Scaling with MAX_AVE stats can't be over output channels.")
+        if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and stats_output_shape != SCALING_SCALAR_SHAPE:
+            raise Exception("Scaling with MAX_AVE/MAX_L2 stats can't be over output channels.")
 
         self.parameter_list_stats = ParameterListStats(stats_op=stats_op,
                                                        stats_output_shape=stats_output_shape,
