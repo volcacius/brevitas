@@ -163,8 +163,9 @@ class AbsMaxL2(torch.jit.ScriptModule):
 
     @torch.jit.script_method
     def forward(self, x: torch.Tensor):
-        out = torch.norm(torch.max(torch.abs(x), dim=self.reduce_dim)[0], p=2)
-        out = out / math.sqrt(x.view(-1).shape[0])
+        per_channel_max = torch.max(torch.abs(x), dim=self.reduce_dim)[0]
+        out = torch.norm(per_channel_max, p=2)
+        out = out / math.sqrt(per_channel_max.view(-1).shape[0])
         return out
 
 
