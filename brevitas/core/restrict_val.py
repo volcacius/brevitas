@@ -107,7 +107,14 @@ class RestrictValue(torch.jit.ScriptModule):
     @staticmethod
     def restrict_value_op(restrict_value_type: RestrictValueType, restrict_value_op_impl_type: RestrictValueOpImplType):
         if restrict_value_type == RestrictValueType.FP or restrict_value_type == RestrictValueType.INT:
-            return lambda x: x
+            if restrict_value_op_impl_type == RestrictValueOpImplType.TORCH_FN:
+                return lambda x: x
+            elif restrict_value_op_impl_type == RestrictValueOpImplType.MATH:
+                return lambda x: x
+            elif restrict_value_op_impl_type == RestrictValueOpImplType.TORCH_MODULE:
+                return Identity()
+            else:
+                raise Exception("Type of implementation {} not recognized".format(str(restrict_value_op_impl_type)))
         elif restrict_value_type == RestrictValueType.LOG_FP or restrict_value_type == RestrictValueType.POWER_OF_TWO:
             if restrict_value_op_impl_type == RestrictValueOpImplType.TORCH_FN:
                 return torch.log2
