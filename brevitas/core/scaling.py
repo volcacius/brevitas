@@ -84,7 +84,7 @@ class StandaloneScaling(torch.jit.ScriptModule):
             raise Exception("Restriction of type {} is not supported for standalone scaling."
                             .format(str(restrict_scaling_type)))
 
-        self.restrict_value = RestrictValue(restrict_scaling_type, FloatToIntImplType.CEIL, scaling_min_val)
+        self.restrict_value = RestrictValue(restrict_scaling_type, FloatToIntImplType.ROUND, scaling_min_val)
         scaling_init_op = RestrictValue.restrict_value_op(restrict_scaling_type,
                                                           restrict_value_op_impl_type=RestrictValueOpImplType.TORCH_FN)
         scaling_init = scaling_init_op(scaling_init)
@@ -202,7 +202,7 @@ class StatsScaling(torch.jit.ScriptModule):
             self.affine_rescaling = AffineRescaling(stats_output_shape)
         else:
             self.affine_rescaling = Identity()
-        self.restrict_scaling = RestrictValue(restrict_scaling_type, FloatToIntImplType.CEIL, scaling_min_val)
+        self.restrict_scaling = RestrictValue(restrict_scaling_type, FloatToIntImplType.ROUND, scaling_min_val)
         self.restrict_scaling_preprocess = RestrictValue.restrict_value_op(restrict_scaling_type,
                                                                            restrict_value_op_impl_type=
                                                                            RestrictValueOpImplType.TORCH_MODULE)
