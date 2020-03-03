@@ -56,7 +56,7 @@ from brevitas.core.quant import QuantType, BinaryQuant, TernaryQuant, RescalingI
 from brevitas.core.quant import PrescaledRestrictIntQuant, PrescaledRestrictIntQuantWithInputBitWidth
 from brevitas.core.restrict_val import RestrictValueType, FloatToIntImplType, RestrictValue
 from brevitas.core.scaling import ScalingImplType, ParameterStatsScaling, StatsInputViewShapeImpl, IntScaling
-from brevitas.core.scaling import StandaloneScaling, SCALING_SCALAR_SHAPE
+from brevitas.core.scaling import StandaloneScaling, SCALING_SCALAR_SHAPE, BufferScaling
 from brevitas.function.ops_ste import round_ste
 from brevitas.core.stats import StatsOp
 from brevitas.core.norm import MaxParameterListNorm, NormImplType, SameAsScalingNorm
@@ -135,7 +135,8 @@ def _weight_quant_init_impl(bit_width: Optional[int],
 
         elif scaling_impl_type == ScalingImplType.STATS \
                 or scaling_impl_type == ScalingImplType.AFFINE_STATS \
-                or scaling_impl_type == ScalingImplType.PARAMETER_FROM_STATS:
+                or scaling_impl_type == ScalingImplType.PARAMETER_FROM_STATS \
+                or scaling_impl_type == ScalingImplType.BUFFER_FROM_STATS:
             stats_scaling = ParameterStatsScaling(stats_op=scaling_stats_op,
                                                   restrict_scaling_type=restrict_scaling_type,
                                                   tracked_parameter_list=tracked_parameter_list,
@@ -155,6 +156,13 @@ def _weight_quant_init_impl(bit_width: Optional[int],
                                                  restrict_scaling_type=restrict_scaling_type,
                                                  is_parameter=True,
                                                  scaling_min_val=scaling_min_val)
+            elif scaling_impl_type == ScalingImplType.BUFFER_FROM_STATS:
+                if quant_type == QuantType.BINARY or quant_type == QuantType.TERNARY:
+                    raise Exception("Buffer from stats scaling is currently not supported for binary/ternary")
+                scaling_init = stats_scaling(zero_hw_sentinel).detach()
+                scaling_impl = BufferScaling(scaling_init=scaling_init,
+                                             restrict_scaling_type=restrict_scaling_type,
+                                             scaling_min_val=scaling_min_val)
             else:
                 scaling_impl = stats_scaling
 
