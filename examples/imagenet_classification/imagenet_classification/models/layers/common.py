@@ -29,12 +29,7 @@ from brevitas.utils.python_utils import AutoName
 
 class MergeBn(AutoName):
     ALL_TO_IDENTITY = auto()
-    ALL_REINIT_PER_CHANNEL = auto()
-    ALL_REINIT_PER_TENSOR = auto()
-    ALL_REINIT_PER_TENSOR_AVE = auto()
-    RESET_STATS = auto()
-    STATS_ONLY = auto()
-    LOG_BN = auto()
+    ALL_TO_MEAN_ONLY = auto()
 
 
 def drop_connect(inputs, training: bool = False, drop_connect_rate: float = 0.):
@@ -123,13 +118,8 @@ def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
         bn_bias_key = '.'.join([bn_prefix,'bias'])
         bn_mean_key = '.'.join([bn_prefix, 'running_mean'])
         bn_var_key = '.'.join([bn_prefix, 'running_var'])
-        bn_keys = [bn_weight_key, bn_bias_key, bn_mean_key, bn_var_key]
-        if merge_bn == MergeBn.RESET_STATS:
-            state_dict[bn_mean_key].fill_(0.0)
-            state_dict[bn_var_key].fill_(1.0)
-            return
-        if merge_bn == MergeBn.LOG_BN:
-            return
+        bn_tracked_batches_key = '.'.join([bn_prefix, 'num_batches_tracked'])
+        bn_keys = [bn_weight_key, bn_bias_key, bn_mean_key, bn_var_key, bn_tracked_batches_key]
         if any(i in state_dict for i in bn_keys):
             mul_factor, add_factor = mul_add_from_bn(
                 bn_mean=state_dict[bn_mean_key],
@@ -137,40 +127,30 @@ def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
                 bn_eps=bn_eps,
                 bn_weight=state_dict[bn_weight_key],
                 bn_bias=state_dict[bn_bias_key],
-                stats_only=merge_bn==MergeBn.STATS_ONLY)
+                stats_only=False)
             mul_shape = conv_mod.per_output_channel_broadcastable_shape
             conv_weight_key = prefix + conv_name + '.weight'
             conv_bias_key = prefix + conv_name + '.bias'
             state_dict[conv_weight_key] *= mul_factor.view(mul_shape)
 
-            if conv_mod.bias is not None and conv_bias_key in state_dict:
-                 state_dict[conv_bias_key] += add_factor
-            elif conv_mod.bias is not None and not conv_bias_key in state_dict:
-                state_dict[conv_bias_key] = add_factor
-            else:
-                conv_mod.bias = nn.Parameter(add_factor)
-                # add it to the dict any to avoid missing key error
-                state_dict[conv_bias_key] = add_factor
-
-            # Get rid of statistics after using them
-            if merge_bn == MergeBn.ALL_TO_IDENTITY or \
-                    merge_bn == MergeBn.ALL_REINIT_PER_TENSOR or \
-                    merge_bn == MergeBn.ALL_REINIT_PER_TENSOR_AVE:
+            if merge_bn == MergeBn.ALL_TO_IDENTITY:
+                if conv_mod.bias is not None and conv_bias_key in state_dict:
+                     state_dict[conv_bias_key] += add_factor
+                elif conv_mod.bias is not None and not conv_bias_key in state_dict:
+                    state_dict[conv_bias_key] = add_factor
+                else:
+                    conv_mod.bias = nn.Parameter(add_factor)
+                    # add it to the dict any to avoid missing key error
+                    state_dict[conv_bias_key] = add_factor
+                # Get rid of statistics after using them
                 for k in list(state_dict.keys()):
                     if k.startswith(bn_prefix):
                         del state_dict[k]
-                if merge_bn == MergeBn.ALL_REINIT_PER_TENSOR or merge_bn == MergeBn.ALL_REINIT_PER_TENSOR_AVE:
-                    state_dict[bn_weight_key] = torch.mean(torch.sqrt(state_dict[bn_var_key] + bn_eps))
-                    state_dict[bn_bias_key] = torch.mean(state_dict[bn_mean_key])
-                    state_dict[bn_mean_key] = torch.tensor(0.0)
-                    state_dict[bn_var_key] = torch.tensor(1.0)
-            elif merge_bn == MergeBn.STATS_ONLY:
-                state_dict[bn_mean_key].fill_(0.0)
-                state_dict[bn_var_key].fill_(1.0)
-            elif merge_bn == MergeBn.ALL_REINIT_PER_CHANNEL:
-                state_dict[bn_weight_key] = torch.sqrt(state_dict[bn_var_key] + bn_eps)
-                state_dict[bn_bias_key] = state_dict[bn_mean_key]
-                state_dict[bn_mean_key].fill_(0.0)
-                state_dict[bn_var_key].fill_(1.0)
+
+            elif merge_bn == MergeBn.ALL_TO_MEAN_ONLY:
+                state_dict[bn_mean_key] *= mul_factor
+                del state_dict[bn_tracked_batches_key]
+                del state_dict[bn_var_key]
+                del state_dict[bn_weight_key]
             else:
                 raise Exception("Merge BN strategy not recognized: {}".format(merge_bn))

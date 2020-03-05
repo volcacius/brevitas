@@ -43,113 +43,35 @@ class MakeLayerWithDefaults:
 # https://github.com/vacancy/Synchronized-BatchNorm-PyTorch
 # Distributed under MIT License.
 
-class TensorBatchNorm2d(nn.Module):
+class MeanOnlyBatchNorm2d(torch.jit.ScriptModule):
+    __constants__ = ['momentum']
 
-    def __init__(self, eps, var_ave, momentum):
-        super(TensorBatchNorm2d, self).__init__()
-        self.eps = eps
-        self.var_ave = var_ave
+    def __init__(self, features, momentum):
+        super(MeanOnlyBatchNorm2d, self).__init__()
         self.momentum = momentum
-        self.weight = nn.Parameter(torch.tensor(1.0))
-        self.bias = nn.Parameter(torch.tensor(0.0))
-        self.register_buffer('running_mean', torch.tensor(0.0))
-        self.register_buffer('running_var', torch.tensor(1.0))
-
-    def forward(self, input_):
-        batchsize, channels, height, width = input_.size()
-        numel = batchsize * height * width
-        permuted_input_ = input_.permute(1, 0, 2, 3).contiguous().view(channels, numel)
-        mean = input_.mean()
-        if self.training:
-            if self.var_ave:
-                per_channel_biased_var = permuted_input_.var(dim=1, unbiased=False)
-                per_channel_unbiased_var = permuted_input_.var(dim=1, unbiased=True)
-                biased_var = per_channel_biased_var.mean()
-                unbiased_var = per_channel_unbiased_var.mean()
-            else:
-                biased_var = input_.var(unbiased=False)
-                unbiased_var = input_.var(unbiased=True)
-            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean.detach()
-            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * unbiased_var.detach()
-            inv_std = 1.0 / (biased_var + self.eps).pow(0.5)
-            output = (input_ - mean) * inv_std * self.weight + self.bias
-        else:
-            inv_std = 1.0 / (self.running_var + self.eps).pow(0.5)
-            output = (input_ - self.running_mean) * inv_std * self.weight + self.bias
-        return output
-
-
-class LogBatchNorm2d(torch.jit.ScriptModule):
-    __constants__ = ['momentum', 'eps']
-
-    def __init__(self, features, eps, momentum):
-        super(LogBatchNorm2d, self).__init__()
-        self.eps = eps
-        self.momentum = momentum
-        self.weight = nn.Parameter(torch.empty(features).fill_(1.0))
         self.bias = nn.Parameter(torch.empty(features).fill_(0.0))
         self.register_buffer('running_mean', torch.empty(features).fill_(0.0))
-        self.register_buffer('running_log_var', torch.empty(features).fill_(0.0))
 
     @torch.jit.script_method
     def forward(self, input_):
         batchsize, channels, height, width = input_.size()
-        numel = batchsize * height * width
-        permuted_input_ = input_.permute(1, 0, 2, 3).contiguous().view(channels, numel)
+        permuted_input_ = input_.permute(1, 0, 2, 3).contiguous().view(channels, -1)
         if self.training:
             mean = permuted_input_.mean(dim=1)
-            biased_var = permuted_input_.var(dim=1, unbiased=False)
-            unbiased_var = permuted_input_.var(dim=1, unbiased=True)
             self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * (mean.detach())
-            self.running_log_var = (1 - self.momentum) * self.running_log_var + self.momentum * torch.log2(unbiased_var.detach())
-            inv_std = 1.0 / (biased_var.view(1, -1, 1, 1) + self.eps).pow(0.5)
-            output = (input_ - mean.view(1, -1, 1, 1)) * inv_std * self.weight.view(1, -1, 1, 1) + self.bias.view(1, -1, 1, 1)
+            output = (input_ - mean.view(1, -1, 1, 1)) + self.bias.view(1, -1, 1, 1)
         else:
-            inv_std = 1.0 / (2.0 ** self.running_log_var.view(1, -1, 1, 1) + self.eps).pow(0.5)
-            output = (input_ - self.running_mean.view(1, -1, 1, 1)) * inv_std * self.weight.view(1, -1, 1, 1) + self.bias.view(1, -1, 1, 1)
+            output = (input_ - self.running_mean.view(1, -1, 1, 1)) + self.bias.view(1, -1, 1, 1)
         return output
-
-    def _load_from_state_dict(
-            self,
-            state_dict,
-            prefix,
-            local_metadata,
-            strict,
-            missing_keys,
-            unexpected_keys,
-            error_msgs):
-        bn_var_key = prefix + 'running_var'
-        bn_log_var_key = prefix + 'running_log_var'
-        bn_batches_tracked_key = prefix + 'num_batches_tracked'
-        if bn_var_key in state_dict:
-            state_dict[bn_log_var_key] = torch.log2(state_dict[bn_var_key])
-            del state_dict[bn_var_key]
-        if bn_batches_tracked_key in state_dict:
-            del state_dict[bn_batches_tracked_key]
-        super(LogBatchNorm2d, self)._load_from_state_dict(
-            state_dict,
-            prefix,
-            local_metadata,
-            strict,
-            missing_keys,
-            unexpected_keys,
-            error_msgs)
 
 
 def make_bn(merge_bn, features, eps, momentum):
-    if merge_bn == MergeBn.ALL_TO_IDENTITY:
+    if merge_bn is None:
+        return nn.BatchNorm2d(features, eps=eps, momentum=momentum)
+    elif merge_bn == MergeBn.ALL_TO_IDENTITY:
         return nn.Identity()
-    elif merge_bn == MergeBn.ALL_REINIT_PER_CHANNEL or \
-            merge_bn == MergeBn.STATS_ONLY or \
-            merge_bn == MergeBn.RESET_STATS or \
-            merge_bn is None:
-        return nn.BatchNorm2d(features, eps, momentum=momentum)
-    elif merge_bn == MergeBn.ALL_REINIT_PER_TENSOR:
-        return TensorBatchNorm2d(eps, var_ave=False, momentum=momentum)
-    elif merge_bn == MergeBn.ALL_REINIT_PER_TENSOR_AVE:
-        return TensorBatchNorm2d(eps, var_ave=True, momentum=momentum)
-    elif merge_bn == MergeBn.LOG_BN:
-        return LogBatchNorm2d(features, eps, momentum)
+    elif merge_bn == MergeBn.ALL_TO_MEAN_ONLY:
+        return MeanOnlyBatchNorm2d(features, momentum)
     else:
         raise Exception("Merge BN strategy not recognized: {}".format(merge_bn))
 
