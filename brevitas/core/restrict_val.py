@@ -69,6 +69,7 @@ class RestrictValueOpImplType(AutoName):
 
 
 class RestrictValue(torch.jit.ScriptModule):
+    __constants__ = ['min_val']
 
     def __init__(self,
                  restrict_value_type: RestrictValueType,
@@ -87,18 +88,18 @@ class RestrictValue(torch.jit.ScriptModule):
                             .format(str(float_to_int_impl_type)))
 
         if min_val is not None:
-            clamp_to_min_val = ClampMin(min_val=min_val)
+            self.min_val = min_val
         else:
-            clamp_to_min_val = Identity()
+            self.min_val = 0.0
 
         if restrict_value_type == RestrictValueType.FP:
-            self.forward_impl = Sequential(Identity(), clamp_to_min_val)
+            self.forward_impl = Identity()
         elif restrict_value_type == RestrictValueType.LOG_FP:
-            self.forward_impl = Sequential(PowerOfTwo(), clamp_to_min_val)
+            self.forward_impl = PowerOfTwo()
         elif restrict_value_type == RestrictValueType.INT:
-            self.forward_impl = Sequential(float_to_int_impl, clamp_to_min_val)
+            self.forward_impl = float_to_int_impl
         elif restrict_value_type == RestrictValueType.POWER_OF_TWO:
-            self.forward_impl = Sequential(float_to_int_impl, PowerOfTwo(), clamp_to_min_val)
+            self.forward_impl = Sequential(float_to_int_impl, PowerOfTwo())
         else:
             raise Exception("Restrict value type {} not recognized".format(str(restrict_value_type)))
 
@@ -129,5 +130,5 @@ class RestrictValue(torch.jit.ScriptModule):
 
     @torch.jit.script_method
     def forward(self, value: torch.Tensor) -> torch.Tensor:
-        value = self.forward_impl(value)
+        value = self.forward_impl(value) + self.min_val
         return value
