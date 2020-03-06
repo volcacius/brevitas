@@ -115,11 +115,6 @@ class StandaloneScaling(torch.jit.ScriptModule):
         retrocomp_value_key = prefix + 'value'
         if retrocomp_value_key in state_dict: #  Retrocompatibility
             state_dict[value_key] = state_dict.pop(retrocomp_value_key)
-        # convert per channel to per tensor with a mean
-        if value_key in state_dict and \
-                state_dict[value_key].shape != SCALING_SCALAR_SHAPE and \
-                self.learned_value.shape == SCALING_SCALAR_SHAPE:
-            state_dict[value_key] = state_dict[value_key].mean()
         super(StandaloneScaling, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
             missing_keys, unexpected_keys, error_msgs)
         if config.IGNORE_MISSING_KEYS and value_key in missing_keys:
