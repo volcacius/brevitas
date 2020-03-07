@@ -132,6 +132,8 @@ class MobileNet(nn.Module):
                  activation_scaling_per_channel,
                  weight_bit_width,
                  activation_bit_width,
+                 last_layer_weight_bit_width,
+                 avg_pool_bit_width,
                  dropout_rate,
                  dropout_samples,
                  merge_bn,
@@ -176,12 +178,12 @@ class MobileNet(nn.Module):
             kernel_size=7,
             stride=1,
             signed=False,
-            bit_width=activation_bit_width)
+            bit_width=avg_pool_bit_width)
         self.output = layers.with_defaults.make_quant_linear(
             in_channels,
             num_classes,
             bias=True,
-            bit_width=weight_bit_width)
+            bit_width=last_layer_weight_bit_width)
 
     def forward(self, x):
         quant_tensor = self.features(x)
@@ -213,6 +215,8 @@ def quant_mobilenet_v1(hparams):
         activation_scaling_per_channel=hparams.model.ACTIVATION_SCALING_PER_CHANNEL,
         weight_bit_width=hparams.model.WEIGHT_BIT_WIDTH,
         activation_bit_width=hparams.model.ACTIVATION_BIT_WIDTH,
+        avg_pool_bit_width=hparams.model.AVG_POOL_BIT_WIDTH,
+        last_layer_weight_bit_width=hparams.model.LAST_LAYER_WEIGHT_BIT_WIDTH,
         dropout_rate=hparams.dropout.RATE,
         dropout_samples=hparams.dropout.SAMPLES,
         merge_bn=hparams.model.MERGE_BN)
