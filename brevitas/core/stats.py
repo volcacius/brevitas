@@ -42,6 +42,7 @@ from typing import Tuple, Optional, List, Union
 from enum import auto
 import math
 
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import Parameter
@@ -70,6 +71,7 @@ class StatsOp(AutoName):
     AVE = auto()
     MAX_AVE = auto()
     MAX_L2 = auto()
+    MAX_L2_RUNTIME = auto()
     MEAN_SIGMA_STD = auto()
     MEAN_LEARN_SIGMA_STD = auto()
 
@@ -169,6 +171,25 @@ class AbsMaxL2(torch.jit.ScriptModule):
         return out
 
 
+class AbsMaxL2Runtime(torch.jit.ScriptModule):
+    __constants__ = ['reduce_dim', 'const']
+
+    def __init__(self, reduce_dim, stats_input_view_shape_impl) -> None:
+        super(AbsMaxL2Runtime, self).__init__()
+        self.reduce_dim = reduce_dim
+        self.stats_input_view_shape_impl = stats_input_view_shape_impl
+        self.const = 0.5 * (1 + (np.pi * np.log(4)) ** 0.5)
+
+    @torch.jit.script_method
+    def forward(self, x: torch.Tensor):
+        batch_size = x.shape[1]
+        x = self.stats_input_view_shape_impl(x)
+        per_channel_max = torch.max(torch.abs(x), dim=self.reduce_dim)[0]
+        out = torch.norm(per_channel_max, p=2)
+        out = out * self.const / ((2 * np.log(batch_size)) ** 0.5)
+        return out
+
+
 class AbsAve(torch.jit.ScriptModule):
     __constants__ = ['reduce_dim']
 
@@ -228,6 +249,7 @@ class Stats(torch.jit.ScriptModule):
                  stats_op: StatsOp,
                  stats_reduce_dim: Optional[int],
                  stats_output_shape: Tuple[int, ...],
+                 stats_input_view_shape_impl: Optional[StatsInputViewShapeImpl],
                  sigma: Optional[float]) -> None:
         super(Stats, self).__init__()
 
@@ -251,6 +273,10 @@ class Stats(torch.jit.ScriptModule):
             self.stats_impl = AbsMaxAve(reduce_dim=stats_reduce_dim)
         elif stats_op == StatsOp.MAX_L2:
             self.stats_impl = AbsMaxL2(reduce_dim=stats_reduce_dim)
+        elif stats_op == StatsOp.MAX_L2_RUNTIME:
+            self.stats_impl = AbsMaxL2Runtime(
+                reduce_dim=stats_reduce_dim,
+                stats_input_view_shape_impl=stats_input_view_shape_impl)
         elif stats_op == StatsOp.MEAN_SIGMA_STD or stats_op == StatsOp.MEAN_LEARN_SIGMA_STD:
             const_sigma = None
             learned_sigma = None
@@ -272,6 +298,7 @@ class Stats(torch.jit.ScriptModule):
 class RuntimeStats(torch.jit.ScriptModule):
     __constants__ = ['stats_input_concat_dim',
                      'stats_permute_dims',
+                     'skip_view_shape_impl',
                      'momentum']
 
     def __init__(self,
@@ -290,7 +317,9 @@ class RuntimeStats(torch.jit.ScriptModule):
         self.stats = Stats(stats_op=stats_op,
                            stats_output_shape=stats_output_shape,
                            stats_reduce_dim=stats_reduce_dim,
-                           sigma=sigma)
+                           sigma=sigma,
+                           stats_input_view_shape_impl=stats_input_view_shape_impl)
+        self.skip_view_sample_impl = stats_op == StatsOp.MAX_L2_RUNTIME
         self.momentum = stats_buffer_momentum
         self.register_buffer('running_stats', torch.full(stats_output_shape, stats_buffer_init))
 
@@ -299,7 +328,8 @@ class RuntimeStats(torch.jit.ScriptModule):
         if self.training:
             if self.stats_permute_dims is not None:
                 stats_input = stats_input.permute(*self.stats_permute_dims).contiguous()
-            stats_input = self.stats_input_view_shape_impl(stats_input)
+            if not self.skip_view_sample_impl:
+                stats_input = self.stats_input_view_shape_impl(stats_input)
             out = self.stats(stats_input)
             self.running_stats *= (1 - self.momentum)
             self.running_stats += self.momentum * out.detach()

@@ -60,6 +60,7 @@ class NormImplType(AutoName):
     MAX = auto()
     MAX_AVE = auto()
     MAX_L2 = auto()
+    MAX_L2_RUNTIME = auto()
 
 
 class MaxParameterListNorm(torch.jit.ScriptModule):
@@ -107,10 +108,10 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                  buffer_momentum: Optional[float],
                  buffer_init: float) -> None:
         super(RuntimeMaxNorm, self).__init__()
-        assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE)
+        assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_L2_RUNTIME)
 
-        if stats_op == StatsOp.MAX_AVE and output_shape != SCALING_SCALAR_SHAPE:
-            raise Exception("Norm with MAX_AVE stats can't be over output channels.")
+        if stats_op == StatsOp.MAX_L2_RUNTIME and output_shape != SCALING_SCALAR_SHAPE:
+            raise Exception("Norm with MAX_L2_RUNTIME stats can't be over output channels.")
         self.eps = EPS
         self.runtime_stats = RuntimeStats(stats_op=stats_op,
                                           stats_output_shape=output_shape,

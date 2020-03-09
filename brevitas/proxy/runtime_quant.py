@@ -195,15 +195,15 @@ class ActivationQuantProxy(QuantProxy):
                     msb_clamp_bit_width_impl = bit_width_impl_override
                     tensor_clamp_impl = TensorClamp()  # if there is an override, it's learned
 
-                if norm_impl_type == NormImplType.MAX or norm_impl_type == NormImplType.MAX_AVE:
+                if norm_impl_type == NormImplType.MAX or norm_impl_type == NormImplType.MAX_L2_RUNTIME:
 
-                    if scaling_per_channel and not norm_impl_type == NormImplType.MAX_AVE:
+                    if scaling_per_channel and not norm_impl_type == NormImplType.MAX_L2_RUNTIME:
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                         norm_stats_reduce_dim = 1
                         norm_stats_permute_dims = scaling_stats_permute_dims
-                    elif scaling_per_channel and norm_impl_type == NormImplType.MAX_AVE:
+                    elif scaling_per_channel and norm_impl_type == NormImplType.MAX_L2_RUNTIME:
                         raise Exception("Can't do per channel norm with MAX AVE statistics.")
-                    elif not scaling_per_channel and norm_impl_type == NormImplType.MAX_AVE:
+                    elif not scaling_per_channel and norm_impl_type == NormImplType.MAX_L2_RUNTIME:
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                         norm_stats_reduce_dim = 1
                         norm_stats_permute_dims = scaling_stats_permute_dims
