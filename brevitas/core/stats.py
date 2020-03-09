@@ -72,6 +72,7 @@ class StatsOp(AutoName):
     MAX_L2 = auto()
     MEAN_SIGMA_STD = auto()
     MEAN_LEARN_SIGMA_STD = auto()
+    SAT_MAX_L2 = auto()
 
 
 class _ViewParameterWrapper(torch.jit.ScriptModule):
@@ -169,6 +170,24 @@ class AbsMaxL2(torch.jit.ScriptModule):
         return out
 
 
+class SatMaxL2(torch.jit.ScriptModule):
+    __constants__ = ['reduce_dim']
+
+    def __init__(self, reduce_dim) -> None:
+        super(AbsMaxL2, self).__init__()
+        self.reduce_dim = reduce_dim
+        self.std_dev_epsilon = STD_DEV_EPSILON
+
+    @torch.jit.script_method
+    def forward(self, x: torch.Tensor):
+        per_channel_max = torch.max(torch.abs(x), dim=self.reduce_dim)[0]
+        normalized = torch.norm(per_channel_max, p=2)
+        normalized = normalized / math.sqrt(per_channel_max.view(-1).shape[0])
+        out = torch.sqrt(torch.var(x + self.std_dev_epsilon) / torch.var(normalized + self.std_dev_epsilon))
+        out = out.detach()
+        return out
+
+
 class AbsAve(torch.jit.ScriptModule):
     __constants__ = ['reduce_dim']
 
@@ -234,7 +253,8 @@ class Stats(torch.jit.ScriptModule):
         if stats_reduce_dim is not None and \
                 len(stats_output_shape) < 2 and \
                 stats_op != StatsOp.MAX_AVE and \
-                stats_op != StatsOp.MAX_L2:
+                stats_op != StatsOp.MAX_L2 and \
+                stats_op != StatsOp.SAT_MAX_L2:
             raise Exception("Defining a reduce dimension requires the output view shape to have at least 2 dims.")
         if  len(stats_output_shape) > 1 and stats_reduce_dim is None:
             raise Exception("Defining an output view shape with more than 1 dims assumes a not None reduce dim.")
@@ -251,6 +271,8 @@ class Stats(torch.jit.ScriptModule):
             self.stats_impl = AbsMaxAve(reduce_dim=stats_reduce_dim)
         elif stats_op == StatsOp.MAX_L2:
             self.stats_impl = AbsMaxL2(reduce_dim=stats_reduce_dim)
+        elif stats_op == StatsOp.SAT_MAX_L2:
+            self.stats_impl = SatMaxL2(reduce_dim=stats_reduce_dim)
         elif stats_op == StatsOp.MEAN_SIGMA_STD or stats_op == StatsOp.MEAN_LEARN_SIGMA_STD:
             const_sigma = None
             learned_sigma = None
