@@ -320,7 +320,7 @@ class RuntimeStats(torch.jit.ScriptModule):
                            stats_reduce_dim=stats_reduce_dim,
                            sigma=sigma,
                            stats_input_view_shape_impl=stats_input_view_shape_impl)
-        self.skip_view_sample_impl = stats_op == StatsOp.MAX_L2_RUNTIME
+        self.skip_view_shape_impl = stats_op == StatsOp.MAX_L2_RUNTIME
         self.momentum = stats_buffer_momentum
         self.register_buffer('running_stats', torch.full(stats_output_shape, stats_buffer_init))
 
@@ -329,7 +329,7 @@ class RuntimeStats(torch.jit.ScriptModule):
         if self.training:
             if self.stats_permute_dims is not None:
                 stats_input = stats_input.permute(*self.stats_permute_dims).contiguous()
-            if not self.skip_view_sample_impl:
+            if not self.skip_view_shape_impl:
                 stats_input = self.stats_input_view_shape_impl(stats_input)
             out = self.stats(stats_input)
             self.running_stats *= (1 - self.momentum)
