@@ -74,7 +74,7 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
             input_concat_dim: int,
             tracked_parameter_list: List[torch.nn.Parameter]):
         super(MaxParameterListNorm, self).__init__()
-        assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2)
+        assert stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2
 
         if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and output_shape != SCALING_SCALAR_SHAPE:
             raise Exception("Norm with MAX_AVE/MAX_L2 stats can't be over output channels.")
@@ -107,7 +107,7 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                  buffer_momentum: Optional[float],
                  buffer_init: float) -> None:
         super(RuntimeMaxNorm, self).__init__()
-        assert(stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE)
+        assert stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2
 
         if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and output_shape != SCALING_SCALAR_SHAPE:
             raise Exception("Norm with MAX_AVE/MAX_L2 stats can't be over output channels.")
