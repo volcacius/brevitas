@@ -195,15 +195,19 @@ class ActivationQuantProxy(QuantProxy):
                     msb_clamp_bit_width_impl = bit_width_impl_override
                     tensor_clamp_impl = TensorClamp()  # if there is an override, it's learned
 
-                if norm_impl_type == NormImplType.MAX or norm_impl_type == NormImplType.MAX_AVE:
+                if norm_impl_type != NormImplType.SAME_AS_SCALING:
 
-                    if scaling_per_channel and not norm_impl_type == NormImplType.MAX_AVE:
+                    if scaling_per_channel and \
+                            not norm_impl_type == NormImplType.MAX_AVE and \
+                            not norm_impl_type == NormImplType.MAX_L2:
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                         norm_stats_reduce_dim = 1
                         norm_stats_permute_dims = scaling_stats_permute_dims
-                    elif scaling_per_channel and norm_impl_type == NormImplType.MAX_AVE:
-                        raise Exception("Can't do per channel norm with MAX AVE statistics.")
-                    elif not scaling_per_channel and norm_impl_type == NormImplType.MAX_AVE:
+                    elif scaling_per_channel and \
+                            (norm_impl_type == NormImplType.MAX_AVE or norm_impl_type == NormImplType.MAX_L2):
+                        raise Exception("Can't do per channel norm with MAX AVE/L2 statistics.")
+                    elif not scaling_per_channel and \
+                            (norm_impl_type == NormImplType.MAX_AVE or norm_impl_type == NormImplType.MAX_L2):
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                         norm_stats_reduce_dim = 1
                         norm_stats_permute_dims = scaling_stats_permute_dims
@@ -220,10 +224,8 @@ class ActivationQuantProxy(QuantProxy):
                                                buffer_momentum=scaling_stats_buffer_momentum,
                                                buffer_init=buffer_init,
                                                permute_dims=norm_stats_permute_dims)
-                elif norm_impl_type == NormImplType.SAME_AS_SCALING:
-                    norm_impl = SameAsScalingNorm()
                 else:
-                    raise Exception("Norm impl type {} not supported yet".format(norm_impl_type))
+                    norm_impl = SameAsScalingNorm()
 
                 float_to_int_impl = RestrictValue(restrict_value_type=RestrictValueType.INT,
                                                   float_to_int_impl_type=float_to_int_impl_type,
