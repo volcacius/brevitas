@@ -174,7 +174,7 @@ class SatMaxL2(torch.jit.ScriptModule):
     __constants__ = ['reduce_dim']
 
     def __init__(self, reduce_dim) -> None:
-        super(AbsMaxL2, self).__init__()
+        super(SatMaxL2, self).__init__()
         self.reduce_dim = reduce_dim
         self.std_dev_epsilon = STD_DEV_EPSILON
 
