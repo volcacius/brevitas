@@ -100,7 +100,7 @@ class QuantImageNetClassification(LightningModule):
         else:
             self.__loss_fn = CrossEntropyLoss()
         if self.hparams.MAX_L2_SCALING_REG > 0.0:
-            self.max_l2_scaling_reg = MaxL2ScalingReg(self.hparams.MAX_AVE_SCALING_REG)
+            self.max_l2_scaling_reg = MaxL2ScalingReg(self.hparams.MAX_L2_SCALING_REG)
         else:
             self.max_l2_scaling_reg = None
 
