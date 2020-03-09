@@ -256,7 +256,8 @@ class Stats(torch.jit.ScriptModule):
         if stats_reduce_dim is not None and \
                 len(stats_output_shape) < 2 and \
                 stats_op != StatsOp.MAX_AVE and \
-                stats_op != StatsOp.MAX_L2:
+                stats_op != StatsOp.MAX_L2 and \
+                stats_op != StatsOp.MAX_L2_RUNTIME:
             raise Exception("Defining a reduce dimension requires the output view shape to have at least 2 dims.")
         if  len(stats_output_shape) > 1 and stats_reduce_dim is None:
             raise Exception("Defining an output view shape with more than 1 dims assumes a not None reduce dim.")
