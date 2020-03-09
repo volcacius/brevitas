@@ -177,7 +177,7 @@ class AbsMaxL2Runtime(torch.jit.ScriptModule):
     def __init__(self, reduce_dim, stats_input_view_shape_impl) -> None:
         super(AbsMaxL2Runtime, self).__init__()
         self.reduce_dim = reduce_dim
-        self.stats_input_view_shape_impl = stats_input_view_shape_impl
+        self.stats_input_view_shape_impl = stats_input_view_shape_impl()
         self.const = 0.5 * (1 + (np.pi * np.log(4)) ** 0.5)
 
     @torch.jit.script_method
