@@ -186,7 +186,7 @@ class AbsMaxL2Runtime(torch.jit.ScriptModule):
         x = self.stats_input_view_shape_impl(x)
         per_channel_max = torch.max(torch.abs(x), dim=self.reduce_dim)[0]
         out = torch.norm(per_channel_max, p=2)
-        out = out * self.const / ((2 * np.log(batch_size)) ** 0.5)
+        out = out * self.const / ((2 * torch.log(batch_size)) ** 0.5)
         return out
 
 
