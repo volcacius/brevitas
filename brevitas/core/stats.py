@@ -374,7 +374,8 @@ class ParameterListStats(torch.jit.ScriptModule):
         self.stats = Stats(stats_op=stats_op,
                            stats_output_shape=stats_output_shape,
                            stats_reduce_dim=stats_reduce_dim,
-                           sigma=sigma)
+                           sigma=sigma,
+                           stats_input_view_shape_impl=None)
 
     @torch.jit.script_method
     def forward(self) -> torch.Tensor:
