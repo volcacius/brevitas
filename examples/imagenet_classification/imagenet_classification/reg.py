@@ -18,6 +18,6 @@ class MaxL2ScalingReg:
                 max_per_tensor = torch.max(max_per_channel)
                 l2_per_tensor = torch.norm(max_per_channel, p=2)
                 scaled_l2_per_tensor = l2_per_tensor / math.sqrt(max_per_channel.view(-1).shape[0])
-                loss += max_per_tensor - scaled_l2_per_tensor
+                loss += (max_per_tensor - scaled_l2_per_tensor) / max_per_tensor
         loss *= self.coeff
         return loss
