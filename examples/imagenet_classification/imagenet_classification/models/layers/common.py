@@ -28,6 +28,8 @@ from brevitas.utils.python_utils import AutoName
 
 
 class MergeBn(AutoName):
+    IDENTITY = auto()
+    MEAN_ONLY = auto()
     ALL_TO_IDENTITY = auto()
     ALL_TO_MEAN_ONLY = auto()
 
@@ -112,6 +114,8 @@ class MergeBnMixin:
 
 
 def _merge_bn_layers(merge_bn, conv_bn_tuples, bn_eps, prefix, state_dict):
+    if merge_bn == MergeBn.IDENTITY or merge_bn == MergeBn.MEAN_ONLY:
+        return
     for conv_mod, conv_name, bn_name, in conv_bn_tuples:
         bn_prefix = prefix + bn_name
         bn_weight_key = '.'.join([bn_prefix, 'weight'])
