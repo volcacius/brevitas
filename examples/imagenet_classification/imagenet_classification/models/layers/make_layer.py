@@ -68,9 +68,9 @@ class MeanOnlyBatchNorm2d(torch.jit.ScriptModule):
 def make_bn(merge_bn, features, eps, momentum):
     if merge_bn is None:
         return nn.BatchNorm2d(features, eps=eps, momentum=momentum)
-    elif merge_bn == MergeBn.ALL_TO_IDENTITY:
+    elif merge_bn == MergeBn.ALL_TO_IDENTITY or merge_bn == MergeBn.IDENTITY:
         return nn.Identity()
-    elif merge_bn == MergeBn.ALL_TO_MEAN_ONLY:
+    elif merge_bn == MergeBn.ALL_TO_MEAN_ONLY or merge_bn == MergeBn.MEAN_ONLY:
         return MeanOnlyBatchNorm2d(features, momentum)
     else:
         raise Exception("Merge BN strategy not recognized: {}".format(merge_bn))
