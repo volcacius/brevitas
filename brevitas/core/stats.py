@@ -171,7 +171,7 @@ class AbsMaxL2(torch.jit.ScriptModule):
 
 
 class SatMaxL2(torch.jit.ScriptModule):
-    __constants__ = ['reduce_dim']
+    __constants__ = ['reduce_dim', 'std_dev_epsilon']
 
     def __init__(self, reduce_dim) -> None:
         super(SatMaxL2, self).__init__()
@@ -181,9 +181,11 @@ class SatMaxL2(torch.jit.ScriptModule):
     @torch.jit.script_method
     def forward(self, x: torch.Tensor):
         per_channel_max = torch.max(torch.abs(x), dim=self.reduce_dim)[0]
-        normalized = torch.norm(per_channel_max, p=2)
-        normalized = normalized / math.sqrt(per_channel_max.view(-1).shape[0])
-        out = torch.sqrt(torch.var(x + self.std_dev_epsilon) / torch.var(normalized + self.std_dev_epsilon))
+        norm_factor = torch.norm(per_channel_max, p=2)
+        num_out_channels = per_channel_max.view(-1).shape[0]
+        norm_factor = norm_factor / math.sqrt(num_out_channels)
+        normalized = x / norm_factor
+        out = torch.sqrt(torch.var(x + self.std_dev_epsilon, unbiased=False) / torch.var(normalized + self.std_dev_epsilon, unbiased=False))
         out = out.detach()
         return out
 
