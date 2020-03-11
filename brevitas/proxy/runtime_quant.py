@@ -137,12 +137,15 @@ class ActivationQuantProxy(QuantProxy):
                 runtime = False
             elif scaling_impl_type == ScalingImplType.STATS or scaling_impl_type == ScalingImplType.AFFINE_STATS:
 
-                if scaling_per_channel and not scaling_stats_op == StatsOp.MAX_AVE:
+                if scaling_per_channel and \
+                        not scaling_stats_op == StatsOp.MAX_AVE and not scaling_stats_op == StatsOp.MAX_L2:
                     scaling_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                     scaling_stats_reduce_dim = 1
-                elif scaling_per_channel and scaling_stats_op == StatsOp.MAX_AVE:
+                elif scaling_per_channel and \
+                        (scaling_stats_op == StatsOp.MAX_AVE or scaling_stats_op == StatsOp.MAX_L2):
                     raise Exception("Can't do per channel scaling with MAX AVE statistics.")
-                elif not scaling_per_channel and scaling_stats_op == StatsOp.MAX_AVE:
+                elif not scaling_per_channel and \
+                        (scaling_stats_op == StatsOp.MAX_AVE or scaling_stats_op == StatsOp.MAX_L2):
                     scaling_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                     scaling_stats_reduce_dim = 1
                 else:  # not scaling_per_channel
