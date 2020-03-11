@@ -49,7 +49,7 @@ from brevitas.core.function_wrapper import Identity
 from brevitas.function.ops import min_int, max_int
 from brevitas.utils.python_utils import AutoName
 from .restrict_val import RestrictValue, RestrictValueType, FloatToIntImplType, RestrictValueOpImplType
-from .stats import StatsOp, StatsInputViewShapeImpl, ParameterListStats, RuntimeStats
+from .stats import StatsOp, StatsInputViewShapeImpl, ParameterListStats, RuntimeStats, RuntimeRestats
 
 SCALING_SCALAR_SHAPE = ()
 EPS = 1e-22
@@ -105,6 +105,7 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                  reduce_dim: Optional[int],
                  permute_dims: Tuple,
                  buffer_momentum: Optional[float],
+                 restats: bool,
                  buffer_init: float) -> None:
         super(RuntimeMaxNorm, self).__init__()
         assert stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2
@@ -112,14 +113,24 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
         if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and output_shape != SCALING_SCALAR_SHAPE:
             raise Exception("Norm with MAX_AVE/MAX_L2 stats can't be over output channels.")
         self.eps = EPS
-        self.runtime_stats = RuntimeStats(stats_op=stats_op,
-                                          stats_output_shape=output_shape,
-                                          stats_reduce_dim=reduce_dim,
-                                          stats_input_view_shape_impl=input_view_shape_impl,
-                                          stats_buffer_momentum=buffer_momentum,
-                                          stats_buffer_init=buffer_init,
-                                          stats_permute_dims=permute_dims,
-                                          sigma=None)
+        if restats:
+            self.runtime_stats = RuntimeRestats(stats_op=stats_op,
+                                                stats_output_shape=output_shape,
+                                                stats_reduce_dim=reduce_dim,
+                                                stats_input_view_shape_impl=input_view_shape_impl,
+                                                stats_buffer_momentum=buffer_momentum,
+                                                stats_buffer_init=buffer_init,
+                                                stats_permute_dims=permute_dims,
+                                                sigma=None)
+        else:
+            self.runtime_stats = RuntimeStats(stats_op=stats_op,
+                                              stats_output_shape=output_shape,
+                                              stats_reduce_dim=reduce_dim,
+                                              stats_input_view_shape_impl=input_view_shape_impl,
+                                              stats_buffer_momentum=buffer_momentum,
+                                              stats_buffer_init=buffer_init,
+                                              stats_permute_dims=permute_dims,
+                                              sigma=None)
 
     @torch.jit.script_method
     def forward(self, x: torch.Tensor, s: torch.Tensor):

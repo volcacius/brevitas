@@ -49,7 +49,7 @@ from brevitas.core.function_wrapper import Identity
 from brevitas.function.ops import min_int, max_int
 from brevitas.utils.python_utils import AutoName
 from .restrict_val import RestrictValue, RestrictValueType, FloatToIntImplType, RestrictValueOpImplType
-from .stats import StatsOp, StatsInputViewShapeImpl, ParameterListStats, RuntimeStats
+from .stats import StatsOp, StatsInputViewShapeImpl, ParameterListStats, RuntimeStats, RuntimeRestats
 
 SCALING_SCALAR_SHAPE = ()
 
@@ -223,17 +223,28 @@ class RuntimeStatsScaling(torch.jit.ScriptModule):
                  stats_permute_dims: Tuple,
                  stats_buffer_momentum: Optional[float],
                  stats_buffer_init: float,
+                 restats: bool,
                  affine: bool) -> None:
         super(RuntimeStatsScaling, self).__init__()
 
-        self.runtime_stats = RuntimeStats(stats_op=stats_op,
-                                          stats_output_shape=stats_output_shape,
-                                          stats_reduce_dim=stats_reduce_dim,
-                                          stats_input_view_shape_impl=stats_input_view_shape_impl,
-                                          stats_buffer_momentum=stats_buffer_momentum,
-                                          stats_buffer_init=stats_buffer_init,
-                                          stats_permute_dims=stats_permute_dims,
-                                          sigma=sigma)
+        if restats:
+            self.runtime_stats = RuntimeRestats(stats_op=stats_op,
+                                                stats_output_shape=stats_output_shape,
+                                                stats_reduce_dim=stats_reduce_dim,
+                                                stats_input_view_shape_impl=stats_input_view_shape_impl,
+                                                stats_buffer_momentum=stats_buffer_momentum,
+                                                stats_buffer_init=stats_buffer_init,
+                                                stats_permute_dims=stats_permute_dims,
+                                                sigma=sigma)
+        else:
+            self.runtime_stats = RuntimeStats(stats_op=stats_op,
+                                              stats_output_shape=stats_output_shape,
+                                              stats_reduce_dim=stats_reduce_dim,
+                                              stats_input_view_shape_impl=stats_input_view_shape_impl,
+                                              stats_buffer_momentum=stats_buffer_momentum,
+                                              stats_buffer_init=stats_buffer_init,
+                                              stats_permute_dims=stats_permute_dims,
+                                              sigma=sigma)
         self.stats_scaling_impl = StatsScaling(restrict_scaling_type=restrict_scaling_type,
                                                scaling_min_val=scaling_min_val,
                                                affine=affine,

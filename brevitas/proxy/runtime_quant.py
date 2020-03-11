@@ -87,6 +87,7 @@ class ActivationQuantProxy(QuantProxy):
                  quant_type: QuantType,
                  float_to_int_impl_type: FloatToIntImplType,
                  norm_impl_type: NormImplType,
+                 norm_restats: bool,
                  scaling_override: Optional[Module],
                  scaling_impl_type: ScalingImplType,
                  scaling_per_channel: bool,
@@ -95,6 +96,7 @@ class ActivationQuantProxy(QuantProxy):
                  scaling_stats_op: Optional[StatsOp],
                  scaling_stats_buffer_momentum: Optional[float],
                  scaling_stats_permute_dims: Optional[Tuple],
+                 scaling_restats: bool,
                  per_channel_broadcastable_shape: Optional[Tuple[int, ...]],
                  min_overall_bit_width: Optional[int],
                  max_overall_bit_width: Optional[int],
@@ -143,15 +145,17 @@ class ActivationQuantProxy(QuantProxy):
                     scaling_stats_reduce_dim = 1
                 elif scaling_per_channel and \
                         (scaling_stats_op == StatsOp.MAX_AVE or scaling_stats_op == StatsOp.MAX_L2):
-                    raise Exception("Can't do per channel scaling with MAX AVE statistics.")
+                    raise Exception("Can't do per channel scaling with MAX AVE/L2 statistics.")
                 elif not scaling_per_channel and \
                         (scaling_stats_op == StatsOp.MAX_AVE or scaling_stats_op == StatsOp.MAX_L2):
                     scaling_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                     scaling_stats_reduce_dim = 1
-                else:  # not scaling_per_channel
+                elif not scaling_per_channel:
                     scaling_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_TENSOR
                     scaling_stats_reduce_dim = None
                     scaling_stats_permute_dims = None
+                else:
+                    raise Exception("Scaling strategy not valid.")
 
                 stats_buffer_init = RescalingIntQuant.scaling_init_from_min_max(min_val, max_val).item()
                 scaling_impl = RuntimeStatsScaling(stats_op=scaling_stats_op,
@@ -164,7 +168,8 @@ class ActivationQuantProxy(QuantProxy):
                                                    stats_buffer_momentum=scaling_stats_buffer_momentum,
                                                    stats_buffer_init=stats_buffer_init,
                                                    stats_permute_dims=scaling_stats_permute_dims,
-                                                   affine=scaling_impl_type == ScalingImplType.AFFINE_STATS)
+                                                   affine=scaling_impl_type == ScalingImplType.AFFINE_STATS,
+                                                   restats=scaling_restats)
                 runtime = True
             else:
                 raise Exception("Scaling type {} not supported for int runtime quantization"
@@ -214,10 +219,12 @@ class ActivationQuantProxy(QuantProxy):
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                         norm_stats_reduce_dim = 1
                         norm_stats_permute_dims = scaling_stats_permute_dims
-                    else:  # not scaling_per_channel
+                    elif not scaling_per_channel:
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_TENSOR
                         norm_stats_reduce_dim = None
                         norm_stats_permute_dims = None
+                    else:
+                        raise Exception("Norm strategy not valid.")
 
                     buffer_init = RescalingIntQuant.scaling_init_from_min_max(min_val, max_val).item()
                     norm_impl = RuntimeMaxNorm(stats_op=StatsOp(norm_impl_type),
@@ -226,7 +233,8 @@ class ActivationQuantProxy(QuantProxy):
                                                output_shape=scaling_shape,
                                                buffer_momentum=scaling_stats_buffer_momentum,
                                                buffer_init=buffer_init,
-                                               permute_dims=norm_stats_permute_dims)
+                                               permute_dims=norm_stats_permute_dims,
+                                               restats=norm_restats)
                 else:
                     norm_impl = SameAsScalingNorm()
 

@@ -48,6 +48,7 @@ from torch.nn import Parameter
 
 import brevitas.config as config
 from brevitas.function.shape import *
+from brevitas.function.ops import tensor_clamp
 from brevitas.core.function_wrapper import OverOutputChannelView, OverBatchOverTensorView
 from brevitas.core.function_wrapper import OverBatchOverOutputChannelView, OverTensorView
 from brevitas.utils.python_utils import AutoName
@@ -339,6 +340,89 @@ class RuntimeStats(torch.jit.ScriptModule):
         if config.IGNORE_MISSING_KEYS and running_stats_key in missing_keys:
             missing_keys.remove(running_stats_key)
         training_key = prefix + 'training' # Pytorch stores training flag as a buffer with JIT enabled
+        if training_key in missing_keys:
+            missing_keys.remove(training_key)
+
+
+class RuntimeRestats(torch.jit.ScriptModule):
+    __constants__ = ['stats_input_concat_dim',
+                     'stats_permute_dims',
+                     'total_num_steps',
+                     'steps_start_threshold',
+                     'steps_end_threshold',
+                     'steps_r_max_increase',
+                     'r_max_diff',
+                     'momentum']
+
+    def __init__(self,
+                 stats_op: StatsOp,
+                 stats_input_view_shape_impl: StatsInputViewShapeImpl,
+                 stats_permute_dims: Tuple[int, ...],
+                 stats_reduce_dim: Optional[int],
+                 stats_output_shape: Tuple[int, ...],
+                 stats_buffer_momentum: float,
+                 stats_buffer_init: float,
+                 sigma: Optional[float]) -> None:
+        super(RuntimeRestats, self).__init__()
+
+        if config.TOTAL_NUM_STEPS is not None:
+            self.total_num_steps = config.TOTAL_NUM_STEPS
+        else:
+            raise Exception("Restats requires setting config.TOTAL_NUM_STEPS")
+
+        self.stats_permute_dims = stats_permute_dims
+        self.stats_input_view_shape_impl = stats_input_view_shape_impl()
+        self.stats = Stats(stats_op=stats_op,
+                           stats_output_shape=stats_output_shape,
+                           stats_reduce_dim=stats_reduce_dim,
+                           sigma=sigma)
+        r_max_init = 1.0
+        max_r_max = 3.0
+        steps_start_threshold_ratio = 0.25
+        steps_end_threshold_ratio = 0.75
+        self.momentum = stats_buffer_momentum
+        self.r_max_diff = max_r_max - r_max_init
+        self.steps_start_threshold = steps_start_threshold_ratio * config.TOTAL_NUM_STEPS
+        self.steps_end_threshold = steps_end_threshold_ratio * config.TOTAL_NUM_STEPS
+        self.steps_r_max_increase = self.total_num_steps - (self.steps_end_threshold - self.steps_start_threshold)
+        self.running_stats = nn.Parameter(torch.full(stats_output_shape, stats_buffer_init))
+        self.register_buffer('r_max', torch.tensor(1.0))
+        self.register_buffer('num_steps', torch.tensor(0))
+
+    @torch.jit.script_method
+    def forward(self, stats_input) -> torch.Tensor:
+        if self.training:
+            self.num_steps += 1
+            if self.num_steps < self.steps_end_threshold:
+                if self.stats_permute_dims is not None:
+                    stats_input = stats_input.permute(*self.stats_permute_dims).contiguous()
+                stats_input = self.stats_input_view_shape_impl(stats_input)
+                stats = self.stats(stats_input)
+                out = stats / tensor_clamp(stats / self.running_stats, 1.0 / self.r_max, self.r_max).detach()
+                self.running_stats.data.mul_(1 - self.momentum)
+                self.running_stats.data.add_(self.momentum * stats.detach())
+                if self.num_steps > self.steps_start_threshold:
+                    self.r_max += self.r_max_diff * (self.num_steps - self.steps_start_threshold) / self.steps_r_max_increase
+            else:
+                out = self.running_stats.view(self.running_stats.shape)  # force casting from Parameter to Tensor
+        else:
+            out = self.running_stats.detach()  # detach is redundant, but forces casting from Parameter to Tensor
+        return out
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        super(RuntimeRestats, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs)
+        running_stats_key = prefix + 'running_stats'
+        r_max_key = prefix + 'r_max'
+        num_steps_key = prefix + 'num_steps'
+        training_key = prefix + 'training' # Pytorch stores training flag as a buffer with JIT enabled
+        if config.IGNORE_MISSING_KEYS and running_stats_key in missing_keys:
+            missing_keys.remove(running_stats_key)
+        if config.IGNORE_MISSING_KEYS and r_max_key in missing_keys:
+            missing_keys.remove(r_max_key)
+        if config.IGNORE_MISSING_KEYS and num_steps_key in missing_keys:
+            missing_keys.remove(num_steps_key)
         if training_key in missing_keys:
             missing_keys.remove(training_key)
 

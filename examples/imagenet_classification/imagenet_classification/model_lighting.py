@@ -17,6 +17,7 @@ from pytorch_lightning.root_module.root_module import LightningModule
 from torch.nn import CrossEntropyLoss
 from torch.optim import SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
+from brevitas import config
 
 from .utils import MissingOptionalDependency
 
@@ -61,12 +62,18 @@ class QuantImageNetClassification(LightningModule):
     def __init__(self, hparams):
         super(QuantImageNetClassification, self).__init__()
         self.hparams = hparams
+        self.configure_brevitas()
         self.configure_layers_defaults()
         self.configure_model()
         self.configure_loss()
         self.load_pretrained_model()
         self.set_random_seed(hparams.SEED)
         self.configure_meters()
+
+    def configure_brevitas(self):
+        batches_per_step = self.hparams.TRAIN_BATCH_SIZE * int(os.environ.get('WORLD_SIZE', 1))
+        steps_per_epoch = self.hparams.DATASET_TRAIN_SIZE // batches_per_step
+        config.TOTAL_NUM_STEPS = steps_per_epoch * self.hparams.EPOCHS
 
     def configure_meters(self):
         self.train_loss_meter = AverageMeter()

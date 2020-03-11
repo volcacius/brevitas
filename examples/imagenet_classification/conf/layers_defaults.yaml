@@ -37,6 +37,8 @@ layers_defaults:
     PER_CHANNEL_BROADCASTABLE_SHAPE:
     SCALING_MIN_VAL: 2e-16
     SCALING_STATS_OP: MAX
+    SCALING_RESTATS: False
+    NORM_RESTATS: False
 
   quant_relu:
     MAX_VAL: 6.0
