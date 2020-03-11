@@ -347,11 +347,11 @@ class RuntimeStats(torch.jit.ScriptModule):
 class RuntimeRestats(torch.jit.ScriptModule):
     __constants__ = ['stats_input_concat_dim',
                      'stats_permute_dims',
-                     'total_num_steps',
                      'steps_start_threshold',
                      'steps_end_threshold',
                      'steps_r_max_increase',
-                     'r_max_diff',
+                     'r_max_init',
+                     'max_r_max',
                      'momentum']
 
     def __init__(self,
@@ -365,9 +365,7 @@ class RuntimeRestats(torch.jit.ScriptModule):
                  sigma: Optional[float]) -> None:
         super(RuntimeRestats, self).__init__()
 
-        if config.TOTAL_NUM_STEPS is not None:
-            self.total_num_steps = config.TOTAL_NUM_STEPS
-        else:
+        if config.TOTAL_NUM_STEPS is None:
             raise Exception("Restats requires setting config.TOTAL_NUM_STEPS")
 
         self.stats_permute_dims = stats_permute_dims
@@ -376,17 +374,16 @@ class RuntimeRestats(torch.jit.ScriptModule):
                            stats_output_shape=stats_output_shape,
                            stats_reduce_dim=stats_reduce_dim,
                            sigma=sigma)
-        r_max_init = 1.0
-        max_r_max = 3.0
         steps_start_threshold_ratio = 0.25
         steps_end_threshold_ratio = 0.75
+        self.r_max_init = 1.0
+        self.max_r_max = 3.0
         self.momentum = stats_buffer_momentum
-        self.r_max_diff = max_r_max - r_max_init
         self.steps_start_threshold = steps_start_threshold_ratio * config.TOTAL_NUM_STEPS
         self.steps_end_threshold = steps_end_threshold_ratio * config.TOTAL_NUM_STEPS
-        self.steps_r_max_increase = self.total_num_steps - (self.steps_end_threshold - self.steps_start_threshold)
+        self.steps_r_max_increase = self.steps_end_threshold - self.steps_start_threshold
         self.running_stats = nn.Parameter(torch.full(stats_output_shape, stats_buffer_init))
-        self.register_buffer('r_max', torch.tensor(1.0))
+        self.register_buffer('r_max', torch.tensor(self.r_max_init))
         self.register_buffer('num_steps', torch.tensor(0))
 
     @torch.jit.script_method
@@ -402,7 +399,8 @@ class RuntimeRestats(torch.jit.ScriptModule):
                 self.running_stats.data.mul_(1 - self.momentum)
                 self.running_stats.data.add_(self.momentum * stats.detach())
                 if self.num_steps > self.steps_start_threshold:
-                    self.r_max += self.r_max_diff * (self.num_steps - self.steps_start_threshold) / self.steps_r_max_increase
+                    r_max_diff_fraction = (self.num_steps - self.steps_start_threshold) / self.steps_r_max_increase
+                    self.r_max = self.r_max_init + (self.max_r_max - self.r_max_init) * r_max_diff_fraction
             else:
                 out = self.running_stats.view(self.running_stats.shape)  # force casting from Parameter to Tensor
         else:
