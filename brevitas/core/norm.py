@@ -44,6 +44,7 @@ from typing import Tuple, Optional, List
 import torch
 from torch import nn
 
+from brevitas import config
 from brevitas.utils.python_utils import AutoName
 from brevitas.function.ops import tensor_clamp
 from .stats import RuntimeRestats, RuntimeStats, StatsOp, StatsInputViewShapeImpl, ParameterListStats
@@ -152,6 +153,14 @@ class RuntimeTiedScalingNorm(torch.jit.ScriptModule):
     def forward(self, norm: torch.Tensor, s: torch.Tensor):
         norm = norm / tensor_clamp(norm.detach() / s, 1.0 / self.r_max, self.r_max)
         return norm
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        super(RuntimeTiedScalingNorm, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs)
+        r_max_key = prefix + 'r_max'
+        if config.IGNORE_MISSING_KEYS and r_max_key in missing_keys:
+            missing_keys.remove(r_max_key)
 
 
 class SameAsScalingNorm(torch.jit.ScriptModule):
