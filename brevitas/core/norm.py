@@ -42,10 +42,11 @@ from enum import auto
 from typing import Tuple, Optional, List
 
 import torch
-
+from torch import nn
 
 from brevitas.utils.python_utils import AutoName
-from .stats import RuntimeRestats, RuntimeStats, RuntimeTiedStats, StatsOp, StatsInputViewShapeImpl, ParameterListStats
+from brevitas.function.ops import tensor_clamp
+from .stats import RuntimeRestats, RuntimeStats, StatsOp, StatsInputViewShapeImpl, ParameterListStats
 
 SCALING_SCALAR_SHAPE = ()
 EPS = 1e-22
@@ -102,6 +103,7 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                  permute_dims: Tuple,
                  buffer_momentum: Optional[float],
                  restats: bool,
+                 tied_scaling_norm: bool,
                  buffer_init: float) -> None:
         super(RuntimeMaxNorm, self).__init__()
         assert stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2
@@ -127,41 +129,28 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                                               stats_buffer_init=buffer_init,
                                               stats_permute_dims=permute_dims,
                                               sigma=None)
+        if tied_scaling_norm:
+            self.tied_scaling_norm = RuntimeTiedScalingNorm(output_shape)
+        else:
+            self.tied_scaling_norm = NoScalingNormTying()
 
     @torch.jit.script_method
     def forward(self, x: torch.Tensor, s: torch.Tensor):
         norm = self.runtime_stats(x)
+        norm = self.tied_scaling_norm(norm, s)
         norm = norm + self.eps
         return norm
 
 
-class RuntimeTiedScalingMaxNorm(torch.jit.ScriptModule):
-    __constants__ = ['eps']
+class RuntimeTiedScalingNorm(torch.jit.ScriptModule):
 
-    def __init__(self,
-                 stats_op: StatsOp,
-                 input_view_shape_impl: StatsInputViewShapeImpl,
-                 output_shape: Tuple[int, ...],
-                 reduce_dim: Optional[int],
-                 permute_dims: Tuple) -> None:
-        super(RuntimeTiedScalingMaxNorm, self).__init__()
-        assert stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2
-
-        if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and output_shape != SCALING_SCALAR_SHAPE:
-            raise Exception("Norm with MAX_AVE/MAX_L2 stats can't be over output channels.")
-        self.eps = EPS
-        self.runtime_tied_stats = RuntimeTiedStats(
-            stats_op=stats_op,
-            stats_output_shape=output_shape,
-            stats_reduce_dim=reduce_dim,
-            stats_input_view_shape_impl=input_view_shape_impl,
-            stats_permute_dims=permute_dims,
-            sigma=None)
+    def __init__(self, output_shape: Tuple[int, ...]) -> None:
+        super(RuntimeTiedScalingNorm, self).__init__()
+        self.r_max = nn.Parameter(torch.full(output_shape, 1.0))
 
     @torch.jit.script_method
-    def forward(self, x: torch.Tensor, s: torch.Tensor):
-        norm = self.runtime_tied_stats(x, s)
-        norm = norm + self.eps
+    def forward(self, norm: torch.Tensor, s: torch.Tensor):
+        norm = norm / tensor_clamp(norm.detach() / s, 1.0 / self.r_max, self.r_max)
         return norm
 
 
@@ -170,6 +159,13 @@ class SameAsScalingNorm(torch.jit.ScriptModule):
     @torch.jit.script_method
     def forward(self, x: torch.Tensor, s: torch.Tensor):
         return s
+
+
+class NoScalingNormTying(torch.jit.ScriptModule):
+
+    @torch.jit.script_method
+    def forward(self, x: torch.Tensor, s: torch.Tensor):
+        return x
 
 
 

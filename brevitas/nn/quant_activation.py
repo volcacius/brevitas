@@ -108,7 +108,7 @@ class QuantReLU(QuantActivation):
                  scaling_stats_buffer_momentum = 0.1,
                  scaling_stats_permute_dims = (1, 0, 2, 3),
                  scaling_restats : bool = False,
-                 tied_norm_stats_scaling_parameter: bool = False,
+                 tied_scaling_norm: bool = False,
                  per_channel_broadcastable_shape: Optional[Tuple[int, ...]] = None,
                  min_overall_bit_width: Optional[int] = 2,
                  max_overall_bit_width: Optional[int] = None,
@@ -147,7 +147,7 @@ class QuantReLU(QuantActivation):
                                                     scaling_stats_buffer_momentum=scaling_stats_buffer_momentum,
                                                     norm_restats=norm_restats,
                                                     scaling_restats=scaling_restats,
-                                                    tied_norm_stats_scaling_parameter=tied_norm_stats_scaling_parameter)
+                                                    tied_scaling_norm=tied_scaling_norm)
 
 
 class QuantSigmoid(QuantActivation):
@@ -193,7 +193,7 @@ class QuantSigmoid(QuantActivation):
                                                     scaling_stats_buffer_momentum=None,
                                                     scaling_stats_permute_dims=None,
                                                     norm_impl_type=NormImplType.SAME_AS_SCALING,
-                                                    tied_norm_stats_scaling_parameter=False,
+                                                    tied_scaling_norm=False,
                                                     norm_restats=False,
                                                     scaling_restats=False)
 
@@ -241,7 +241,7 @@ class QuantTanh(QuantActivation):
                                                     scaling_stats_buffer_momentum=None,
                                                     scaling_stats_permute_dims=None,
                                                     norm_impl_type=NormImplType.SAME_AS_SCALING,
-                                                    tied_norm_stats_scaling_parameter=False,
+                                                    tied_scaling_norm=False,
                                                     norm_restats=False,
                                                     scaling_restats=False)
 
@@ -265,7 +265,7 @@ class QuantHardTanh(QuantActivation):
                  scaling_stats_buffer_momentum: float = 0.1,
                  scaling_stats_permute_dims: Tuple = (1, 0, 2, 3),
                  scaling_restats: bool = False,
-                 tied_norm_stats_scaling_parameter: bool = False,
+                 tied_scaling_norm: bool = False,
                  per_channel_broadcastable_shape: Optional[Tuple[int, ...]] = None,
                  min_overall_bit_width: Optional[int] = 2,
                  max_overall_bit_width: Optional[int] = None,
@@ -306,6 +306,6 @@ class QuantHardTanh(QuantActivation):
                                                     scaling_stats_op=scaling_stats_op,
                                                     scaling_stats_buffer_momentum=scaling_stats_buffer_momentum,
                                                     scaling_stats_permute_dims=scaling_stats_permute_dims,
-                                                    tied_norm_stats_scaling_parameter=tied_norm_stats_scaling_parameter,
+                                                    tied_scaling_norm=tied_scaling_norm,
                                                     norm_restats=norm_restats,
                                                     scaling_restats=scaling_restats)
