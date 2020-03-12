@@ -160,7 +160,7 @@ def make_quant_relu(bit_width,
                     per_channel_broadcastable_shape,
                     norm_restats,
                     scaling_restats,
-                    tied_norm_stats_scaling_parameter):
+                    tied_scaling_norm):
     return qnn.QuantReLU(bit_width=bit_width,
                          quant_type=quant_type,
                          norm_impl_type=norm_impl_type,
@@ -174,7 +174,7 @@ def make_quant_relu(bit_width,
                          per_channel_broadcastable_shape=per_channel_broadcastable_shape,
                          norm_restats=norm_restats,
                          scaling_restats=scaling_restats,
-                         tied_norm_stats_scaling_parameter=tied_norm_stats_scaling_parameter)
+                         tied_scaling_norm=tied_scaling_norm)
 
 
 def make_quant_hard_tanh(bit_width,
@@ -190,7 +190,7 @@ def make_quant_hard_tanh(bit_width,
                          per_channel_broadcastable_shape,
                          norm_restats,
                          scaling_restats,
-                         tied_norm_stats_scaling_parameter):
+                         tied_scaling_norm):
     return qnn.QuantHardTanh(bit_width=bit_width,
                              quant_type=quant_type,
                              scaling_per_channel=scaling_per_channel,
@@ -205,7 +205,7 @@ def make_quant_hard_tanh(bit_width,
                              return_quant_tensor=return_quant_tensor,
                              norm_restats=norm_restats,
                              scaling_restats=scaling_restats,
-                             tied_norm_stats_scaling_parameter=tied_norm_stats_scaling_parameter)
+                             tied_scaling_norm=tied_scaling_norm)
 
 
 def make_quant_avg_pool(bit_width,
