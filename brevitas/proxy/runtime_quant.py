@@ -54,7 +54,7 @@ from brevitas.core.restrict_val import RestrictValueType, RestrictValue, FloatTo
 from brevitas.core.scaling import RuntimeStatsScaling, SCALING_SCALAR_SHAPE, StatsInputViewShapeImpl
 from brevitas.core.scaling import ScalingImplType, StandaloneScaling, IntScaling
 from brevitas.core.stats import StatsOp
-from brevitas.core.norm import NormImplType, RuntimeMaxNorm, SameAsScalingNorm
+from brevitas.core.norm import NormImplType, RuntimeMaxNorm, SameAsScalingNorm, RuntimeTiedScalingMaxNorm
 
 from .quant_proxy import QuantProxy
 
@@ -97,6 +97,7 @@ class ActivationQuantProxy(QuantProxy):
                  scaling_stats_buffer_momentum: Optional[float],
                  scaling_stats_permute_dims: Optional[Tuple],
                  scaling_restats: bool,
+                 tied_norm_stats_scaling_parameter: bool,
                  per_channel_broadcastable_shape: Optional[Tuple[int, ...]],
                  min_overall_bit_width: Optional[int],
                  max_overall_bit_width: Optional[int],
@@ -226,8 +227,19 @@ class ActivationQuantProxy(QuantProxy):
                     else:
                         raise Exception("Norm strategy not valid.")
 
-                    buffer_init = RescalingIntQuant.scaling_init_from_min_max(min_val, max_val).item()
-                    norm_impl = RuntimeMaxNorm(stats_op=StatsOp(norm_impl_type),
+                    if tied_norm_stats_scaling_parameter:
+                        assert scaling_impl_type == ScalingImplType.PARAMETER
+                        assert not norm_restats
+                        assert not scaling_restats
+                        norm_impl = RuntimeTiedScalingMaxNorm(
+                            stats_op=StatsOp(norm_impl_type),
+                            input_view_shape_impl=norm_stats_input_view_shape_impl,
+                            reduce_dim=norm_stats_reduce_dim,
+                            output_shape=scaling_shape,
+                            permute_dims=norm_stats_permute_dims)
+                    else:
+                        buffer_init = RescalingIntQuant.scaling_init_from_min_max(min_val, max_val).item()
+                        norm_impl = RuntimeMaxNorm(stats_op=StatsOp(norm_impl_type),
                                                input_view_shape_impl=norm_stats_input_view_shape_impl,
                                                reduce_dim=norm_stats_reduce_dim,
                                                output_shape=scaling_shape,

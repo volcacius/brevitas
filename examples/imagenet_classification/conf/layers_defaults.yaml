@@ -39,6 +39,7 @@ layers_defaults:
     SCALING_STATS_OP: MAX
     SCALING_RESTATS: False
     NORM_RESTATS: False
+    TIED_NORM_STATS_SCALING_PARAMETER: False
 
   quant_relu:
     MAX_VAL: 6.0

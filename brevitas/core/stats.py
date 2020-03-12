@@ -425,6 +425,51 @@ class RuntimeRestats(torch.jit.ScriptModule):
             missing_keys.remove(training_key)
 
 
+class RuntimeTiedStats(torch.jit.ScriptModule):
+    __constants__ = ['stats_input_concat_dim',
+                     'stats_permute_dims']
+
+    def __init__(self,
+                 stats_op: StatsOp,
+                 stats_input_view_shape_impl: StatsInputViewShapeImpl,
+                 stats_permute_dims: Tuple[int, ...],
+                 stats_reduce_dim: Optional[int],
+                 stats_output_shape: Tuple[int, ...],
+                 sigma: Optional[float]) -> None:
+        super(RuntimeTiedStats, self).__init__()
+
+        self.stats_permute_dims = stats_permute_dims
+        self.stats_input_view_shape_impl = stats_input_view_shape_impl()
+        self.stats = Stats(stats_op=stats_op,
+                           stats_output_shape=stats_output_shape,
+                           stats_reduce_dim=stats_reduce_dim,
+                           sigma=sigma)
+        self.r_max = nn.Parameter(torch.full(stats_output_shape, 1.0))
+
+    @torch.jit.script_method
+    def forward(self, stats_input, tied_factor) -> torch.Tensor:
+        if self.training:
+            if self.stats_permute_dims is not None:
+                stats_input = stats_input.permute(*self.stats_permute_dims).contiguous()
+            stats_input = self.stats_input_view_shape_impl(stats_input)
+            stats = self.stats(stats_input)
+            out = stats / tensor_clamp(stats.detach() / tied_factor, 1.0 / self.r_max, self.r_max)
+        else:
+            out = tied_factor
+        return out
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        super(RuntimeTiedStats, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs)
+        r_max_key = prefix + 'r_max'
+        training_key = prefix + 'training' # Pytorch stores training flag as a buffer with JIT enabled
+        if config.IGNORE_MISSING_KEYS and r_max_key in missing_keys:
+            missing_keys.remove(r_max_key)
+        if training_key in missing_keys:
+            missing_keys.remove(training_key)
+
+
 class ParameterListStats(torch.jit.ScriptModule):
     __constants__ = ['stats_input_concat_dim',
                      'extra_tracked_params_list']
