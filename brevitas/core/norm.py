@@ -94,7 +94,6 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
 
 
 class RuntimeMaxNorm(torch.jit.ScriptModule):
-    __constants__ = ['eps']
 
     def __init__(self,
                  stats_op: StatsOp,
@@ -111,7 +110,6 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
         assert not (tied_scaling_norm and restats)
         if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and output_shape != SCALING_SCALAR_SHAPE:
             raise Exception("Norm with MAX_AVE/MAX_L2 stats can't be over output channels.")
-        self.eps = EPS
         if restats and not tied_scaling_norm:
             self.runtime_stats = RuntimeRestats(stats_op=stats_op,
                                                 stats_output_shape=output_shape,
@@ -150,6 +148,7 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
 
 
 class RuntimeTiedScalingNorm(torch.jit.ScriptModule):
+    __constants__ = ['eps']
 
     def __init__(self) -> None:
         super(RuntimeTiedScalingNorm, self).__init__()
@@ -180,6 +179,7 @@ class SameAsScalingNorm(torch.jit.ScriptModule):
 
 
 class NoScalingNormTying(torch.jit.ScriptModule):
+    __constants__ = ['eps']
 
     def __init__(self) -> None:
         super(NoScalingNormTying, self).__init__()
