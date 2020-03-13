@@ -47,7 +47,7 @@ from torch import nn
 from brevitas import config
 from brevitas.utils.python_utils import AutoName
 from brevitas.function.ops import tensor_clamp
-from .stats import RuntimeRestats, RuntimeStats, StatsOp, StatsInputViewShapeImpl, ParameterListStats
+from .stats import RuntimeRestats, RuntimeStats, StatsOp, StatsInputViewShapeImpl, ParameterListStats, RuntimeStatsNoBuffer
 
 SCALING_SCALAR_SHAPE = ()
 EPS = 1e-22
@@ -108,11 +108,11 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                  buffer_init: float) -> None:
         super(RuntimeMaxNorm, self).__init__()
         assert stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2
-
+        assert not (tied_scaling_norm and restats)
         if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and output_shape != SCALING_SCALAR_SHAPE:
             raise Exception("Norm with MAX_AVE/MAX_L2 stats can't be over output channels.")
         self.eps = EPS
-        if restats:
+        if restats and not tied_scaling_norm:
             self.runtime_stats = RuntimeRestats(stats_op=stats_op,
                                                 stats_output_shape=output_shape,
                                                 stats_reduce_dim=reduce_dim,
@@ -121,7 +121,7 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                                                 stats_buffer_init=buffer_init,
                                                 stats_permute_dims=permute_dims,
                                                 sigma=None)
-        else:
+        elif not restats and not tied_scaling_norm:
             self.runtime_stats = RuntimeStats(stats_op=stats_op,
                                               stats_output_shape=output_shape,
                                               stats_reduce_dim=reduce_dim,
@@ -130,6 +130,13 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                                               stats_buffer_init=buffer_init,
                                               stats_permute_dims=permute_dims,
                                               sigma=None)
+        else: # tied_scaling_norm
+            self.runtime_stats = RuntimeStatsNoBuffer(stats_op=stats_op,
+                                                      stats_output_shape=output_shape,
+                                                      stats_reduce_dim=reduce_dim,
+                                                      stats_input_view_shape_impl=input_view_shape_impl,
+                                                      stats_permute_dims=permute_dims,
+                                                      sigma=None)
         if tied_scaling_norm:
             self.tied_scaling_norm = RuntimeTiedScalingNorm(output_shape)
         else:
@@ -145,22 +152,21 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
 
 class RuntimeTiedScalingNorm(torch.jit.ScriptModule):
 
-    def __init__(self, output_shape: Tuple[int, ...]) -> None:
-        super(RuntimeTiedScalingNorm, self).__init__()
-        self.r_max = nn.Parameter(torch.full(output_shape, 1.0))
-
     @torch.jit.script_method
     def forward(self, norm: torch.Tensor, s: torch.Tensor):
-        norm = norm / tensor_clamp(norm.detach() / s, 1.0 / self.r_max, self.r_max)
-        return norm
+        if self.training:
+            out = norm * s / norm.detach()
+        else:
+            out = s
+        return out
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):
         super(RuntimeTiedScalingNorm, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
             missing_keys, unexpected_keys, error_msgs)
-        r_max_key = prefix + 'r_max'
-        if config.IGNORE_MISSING_KEYS and r_max_key in missing_keys:
-            missing_keys.remove(r_max_key)
+        training_key = prefix + 'training' # Pytorch stores training flag as a buffer with JIT enabled
+        if training_key in missing_keys:
+            missing_keys.remove(training_key)
 
 
 class SameAsScalingNorm(torch.jit.ScriptModule):

@@ -294,6 +294,34 @@ class Stats(torch.jit.ScriptModule):
         return stats
 
 
+class RuntimeStatsNoBuffer(torch.jit.ScriptModule):
+    __constants__ = ['stats_permute_dims']
+
+    def __init__(self,
+                 stats_op: StatsOp,
+                 stats_input_view_shape_impl: StatsInputViewShapeImpl,
+                 stats_permute_dims: Tuple[int, ...],
+                 stats_reduce_dim: Optional[int],
+                 stats_output_shape: Tuple[int, ...],
+                 sigma: Optional[float]) -> None:
+        super(RuntimeStatsNoBuffer, self).__init__()
+
+        self.stats_permute_dims = stats_permute_dims
+        self.stats_input_view_shape_impl = stats_input_view_shape_impl()
+        self.stats = Stats(stats_op=stats_op,
+                           stats_output_shape=stats_output_shape,
+                           stats_reduce_dim=stats_reduce_dim,
+                           sigma=sigma)
+
+    @torch.jit.script_method
+    def forward(self, stats_input) -> torch.Tensor:
+        if self.stats_permute_dims is not None:
+            stats_input = stats_input.permute(*self.stats_permute_dims).contiguous()
+        stats_input = self.stats_input_view_shape_impl(stats_input)
+        out = self.stats(stats_input)
+        return out
+
+
 class RuntimeStats(torch.jit.ScriptModule):
     __constants__ = ['stats_input_concat_dim',
                      'stats_permute_dims',
