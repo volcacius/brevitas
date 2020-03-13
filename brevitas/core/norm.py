@@ -138,7 +138,7 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                                                       stats_permute_dims=permute_dims,
                                                       sigma=None)
         if tied_scaling_norm:
-            self.tied_scaling_norm = RuntimeTiedScalingNorm(output_shape)
+            self.tied_scaling_norm = RuntimeTiedScalingNorm()
         else:
             self.tied_scaling_norm = NoScalingNormTying()
 
