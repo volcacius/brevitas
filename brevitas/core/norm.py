@@ -146,16 +146,19 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
     def forward(self, x: torch.Tensor, s: torch.Tensor):
         norm = self.runtime_stats(x)
         norm = self.tied_scaling_norm(norm, s)
-        norm = norm + self.eps
         return norm
 
 
 class RuntimeTiedScalingNorm(torch.jit.ScriptModule):
 
+    def __init__(self) -> None:
+        super(RuntimeTiedScalingNorm, self).__init__()
+        self.eps = EPS
+
     @torch.jit.script_method
     def forward(self, norm: torch.Tensor, s: torch.Tensor):
         if self.training:
-            out = norm * s / norm.detach()
+            out = (norm * s + self.eps) / (norm.detach() + self.eps)
         else:
             out = s
         return out
@@ -178,9 +181,13 @@ class SameAsScalingNorm(torch.jit.ScriptModule):
 
 class NoScalingNormTying(torch.jit.ScriptModule):
 
+    def __init__(self) -> None:
+        super(NoScalingNormTying, self).__init__()
+        self.eps = EPS
+
     @torch.jit.script_method
     def forward(self, x: torch.Tensor, s: torch.Tensor):
-        return x
+        return x + self.eps
 
 
 
