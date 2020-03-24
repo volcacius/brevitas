@@ -3,6 +3,7 @@ import os
 import random
 import configparser
 
+import numpy as np
 import torch
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
@@ -24,7 +25,7 @@ parser = argparse.ArgumentParser(description='PyTorch ImageNet Validation')
 parser.add_argument('--imagenet-dir', help='path to folder containing Imagenet val folder')
 parser.add_argument('--model-cfg', type=str, help='Path to pretrained model .ini configuration file')
 parser.add_argument('--output-dir', type=str, help='Path to export files')
-parser.add_argument('--workers', default=4, type=int, help='number of data loading workers')
+parser.add_argument('--workers', default=0, type=int, help='number of data loading workers')
 parser.add_argument('--batch-size', default=256, type=int, help='Minibatch size')
 parser.add_argument('--gpu', default=None, type=int, help='GPU id to use.')
 parser.add_argument('--export', action='store_true')
@@ -56,40 +57,21 @@ def main():
     checkpoint = torch.hub.load_state_dict_from_url(pretrained_url, map_location=loc)
     model.load_state_dict(checkpoint, strict=True)
 
-    if args.export:
-        input_sample = torch.randn(1, 3, 224, 224)
-        if args.gpu is not None:
-            input_sample = input_sample.to(loc)
-        weight_list, threshold_list, config_list = model.export(input_sample)
-        weight_output_path = os.path.join(args.output_dir, 'memdata.h')
-        config_output_path = os.path.join(args.output_dir, 'config.h')
-        with open(weight_output_path, 'w') as f:
-            for weight_set in weight_list:
-                f.write(weight_set)
-                f.write('\n')
-            for threshold_set in threshold_list:
-                f.write(threshold_set)
-                f.write('\n')
-        with open(config_output_path, 'w') as f:
-            for config_line in config_list:
-                f.write(config_line)
-    else:
-        valdir = os.path.join(args.imagenet_dir, 'val')
-        mean = [float(cfg.get('PREPROCESS', 'MEAN_0')), float(cfg.get('PREPROCESS', 'MEAN_1')),
-                float(cfg.get('PREPROCESS', 'MEAN_2'))]
-        std = [float(cfg.get('PREPROCESS', 'STD_0')), float(cfg.get('PREPROCESS', 'STD_1')),
-               float(cfg.get('PREPROCESS', 'STD_2'))]
-        normalize = transforms.Normalize(mean=mean, std=std)
-        val_loader = torch.utils.data.DataLoader(
-            datasets.ImageFolder(valdir, transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                normalize,
-            ])),
-            batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
-        validate(val_loader, model, args)
-    return
+    valdir = os.path.join(args.imagenet_dir, 'val')
+    mean = [float(cfg.get('PREPROCESS', 'MEAN_0')), float(cfg.get('PREPROCESS', 'MEAN_1')),
+            float(cfg.get('PREPROCESS', 'MEAN_2'))]
+    std = [float(cfg.get('PREPROCESS', 'STD_0')), float(cfg.get('PREPROCESS', 'STD_1')),
+           float(cfg.get('PREPROCESS', 'STD_2'))]
+    normalize = transforms.Normalize(mean=mean, std=std)
+    val_loader = torch.utils.data.DataLoader(
+        datasets.ImageFolder(valdir, transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ])),
+        batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
+    validate(val_loader, model, args)
 
 
 def validate(val_loader, model, args):
@@ -107,6 +89,28 @@ def validate(val_loader, model, args):
             if args.gpu is not None:
                 images = images.cuda(args.gpu, non_blocking=True)
                 target = target.cuda(args.gpu, non_blocking=True)
+
+            if args.export:
+                exp_input = images[0].unsqueeze(0)
+                weight_list, threshold_list, config_list, int_input_list, int_acc_list = model.export(exp_input)
+                weight_output_path = os.path.join(args.output_dir, 'memdata.h')
+                config_output_path = os.path.join(args.output_dir, 'config.h')
+                with open(weight_output_path, 'w') as f:
+                    for weight_set in weight_list:
+                        f.write(weight_set)
+                        f.write('\n')
+                    for threshold_set in threshold_list:
+                        f.write(threshold_set)
+                        f.write('\n')
+                with open(config_output_path, 'w') as f:
+                    for config_line in config_list:
+                        f.write(config_line)
+                for array_tuple in int_input_list:
+                    np.save(os.path.join(args.output_dir, array_tuple[0] + '.npy'), array_tuple[1])
+                for array_tuple in int_acc_list:
+                    np.save(os.path.join(args.output_dir, array_tuple[0] + '.npy'), array_tuple[1])
+                return
+
             output = model(images)
             # measure accuracy
             acc1, acc5 = accuracy(output, target, topk=(1, 5))

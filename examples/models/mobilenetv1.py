@@ -91,6 +91,7 @@ class ConvBlock(nn.Module):
                  padding=0,
                  groups=1,
                  bn_eps=1e-5,
+                 mean=None,
                  activation_scaling_per_channel=False):
         super(ConvBlock, self).__init__()
         self.conv = make_quant_conv2d(in_channels=in_channels,
@@ -106,17 +107,26 @@ class ConvBlock(nn.Module):
                                           per_channel_broadcastable_shape=(1, out_channels, 1, 1),
                                           scaling_per_channel=activation_scaling_per_channel,
                                           return_quant_tensor=True)
+        self.mean = mean
+        self.int_input = None
+        self.int_output = None
         self.input_2d_shape = None
         self.output_2d_shape = None
         self.acc_scale = None
         self.acc_bit_width = None
         self.output_bit_width = None
+        self.preprocessing_bias = None
 
     def export(self, name_prefix):
+        bias_factor_init = 0.0
+        if self.conv.bias:
+            bias_factor_init += self.conv.bias
+        if self.preprocessing_bias is not None:
+            bias_factor_init += self.preprocessing_bias
         factors_tuple = scale_bias_fusion(
             self.bn,
             scale_factor_init=self.acc_scale,
-            bias_factor_init=self.conv.bias if self.conv.bias else 0.0)
+            bias_factor_init=bias_factor_init)
         acc_scale_factor, acc_bias_factor, weight_sign_factor = factors_tuple
         # Threshold
         threshold = hls_threshold_string(
@@ -142,21 +152,34 @@ class ConvBlock(nn.Module):
             weight_bit_width=weight_bit_width,
             input_2d_shape=self.input_2d_shape,
             output_2d_shape=self.output_2d_shape)
+        # Int inp/output
+        int_input = (name_prefix.lower() + '_int_input', self.int_input.detach().cpu().numpy())
+        int_acc = (name_prefix.lower() + '_int_acc', self.int_acc.detach().cpu().numpy())
         # Return as a list of a single tuple
-        export_tuple = conv_weight, threshold, config_list
+        export_tuple = conv_weight, threshold, config_list, int_input, int_acc
         return [export_tuple]
 
     def forward(self, x):
-        input_shape = x.tensor.shape
-        x, acc_scale, acc_bit_width = self.conv(x)
-        x = self.bn(x)
+        inp = x
+        acc = self.conv(x)
+        x = self.bn(acc.tensor)
         x = self.activation(x)
         if EXPORT:
-            self.input_2d_shape = (input_shape[2], input_shape[3])
-            self.acc_scale = acc_scale.detach()
-            self.acc_bit_width = acc_bit_width.int().item()
+            self.int_input = torch.round(inp.tensor / inp.scale).int()
+            self.int_acc = torch.round(acc.tensor / acc.scale).int()
+            self.input_2d_shape = (inp.tensor.shape[2], inp.tensor.shape[3])
+            self.acc_scale = acc.scale.detach()
+            self.acc_bit_width = acc.bit_width.int().item()
             self.output_bit_width = x.bit_width.int().item()
             self.output_2d_shape = (x.tensor.shape[2], x.tensor.shape[3])
+            if self.mean is not None:
+                preproc_bias_input = - 255 * inp.scale * torch.tensor(self.mean, device=x.tensor.device).view(1, -1, 1, 1)
+                preproc_bias_input_shape = (inp.tensor.shape[0], inp.tensor.shape[1], *self.conv.kernel_size)
+                preproc_bias_input_expanded = preproc_bias_input.expand(preproc_bias_input_shape)
+                preproc_bias = self.conv(pack_quant_tensor(preproc_bias_input_expanded, 0.0, 0)).tensor
+                self.preprocessing_bias = preproc_bias
+                self.int_input = torch.round((inp.tensor - preproc_bias_input.expand_as(inp.tensor)) / inp.scale).int()
+                self.int_acc = torch.round((acc.tensor - preproc_bias.expand_as(acc.tensor) / acc.scale)).int()
         return x
 
 
@@ -167,10 +190,12 @@ class MobileNet(nn.Module):
                  first_stage_stride,
                  bit_width,
                  in_channels=3,
-                 num_classes=1000):
+                 num_classes=1000,
+                 mean=None,
+                 std=None):
         super(MobileNet, self).__init__()
         init_block_channels = channels[0][0]
-
+        self.std = std
         self.features = Sequential()
         init_block = ConvBlock(in_channels=in_channels,
                                out_channels=init_block_channels,
@@ -178,7 +203,8 @@ class MobileNet(nn.Module):
                                stride=2,
                                weight_bit_width=FIRST_LAYER_BIT_WIDTH,
                                activation_scaling_per_channel=True,
-                               act_bit_width=bit_width)
+                               act_bit_width=bit_width,
+                               mean=mean)
         self.features.add_module('init_block', init_block)
         in_channels = init_block_channels
         for i, channels_per_stage in enumerate(channels[1:]):
@@ -203,6 +229,8 @@ class MobileNet(nn.Module):
                                         enable_bias_quant=True,
                                         bit_width=bit_width,
                                         weight_scaling_per_output_channel=False)
+        self.avg_pool_int_input = None
+        self.fc_int_input = None
 
     def export(self, input_sample):
         self.eval()
@@ -214,15 +242,38 @@ class MobileNet(nn.Module):
             for j, block in enumerate(stage):
                 name_prefix = 'layer{}_block{}'.format(i, j)
                 export_list.extend(block.export(name_prefix=name_prefix))
-        weight_list, threshold_list, config_list = zip(*export_list)
-        return weight_list, threshold_list, config_list
+        export_list_list = [list(i) for i in zip(*export_list)]
+        weight_list, threshold_list, config_list, int_input_list, int_acc_list = export_list_list
+        int_input_list.append(('avg_pool_int_input', self.avg_pool_int_input.detach().cpu().numpy()))
+        int_input_list.append(('fc_int_input', self.fc_int_input.detach().cpu().numpy()))
+
+        # # Weight
+        # name_prefix = 'fc'
+        # weight_bit_width_impl = self.output.weight_quant.tensor_quant.msb_clamp_bit_width_impl
+        # weight_bit_width = weight_bit_width_impl(getattr(self.output.weight_quant, ZERO_HW_SENTINEL_NAME))
+        # weight_bit_width = weight_bit_width.int().item()
+        # fc_weight = hls_weight_string(
+        #     self.output,
+        #     weight_bit_width=weight_bit_width,
+        #     hls_var_name='{}_weight'.format(name_prefix.lower()),
+        #     sign_factor=None)
+        # # Config
+        # config_list = hls_config_string_fc(
+        #     self.output,
+        #     name_prefix.upper(),
+        #     weight_bit_width=weight_bit_width)
+
+        return weight_list, threshold_list, config_list, int_input_list, int_acc_list
 
     def forward(self, x):
-        x = pack_quant_tensor(x, torch.tensor(0.226).to(x.device), torch.tensor(8.0).to(x.device))
+        x = pack_quant_tensor(x, 1.0 / torch.tensor(self.std * 255.0).to(x.device), torch.tensor(8.0).to(x.device))
         quant_tensor = self.features(x)
         x, scale, bit_width = self.final_pool(quant_tensor)
         x = x.view(x.size(0), -1)
         out = self.output(pack_quant_tensor(x, scale, bit_width))
+        if EXPORT:
+            self.avg_pool_int_input = torch.round(quant_tensor.tensor / quant_tensor.scale).int()
+            self.fc_int_input = torch.round(x / scale).int()
         return out
 
 
@@ -232,11 +283,15 @@ def quant_mobilenet_v1(cfg):
     first_stage_stride = False
     width_scale = float(cfg.get('MODEL', 'WIDTH_SCALE'))
     bit_width = cfg.getint('QUANT', 'BIT_WIDTH')
-
+    mean = [float(cfg.get('PREPROCESS', 'MEAN_0')), float(cfg.get('PREPROCESS', 'MEAN_1')),
+            float(cfg.get('PREPROCESS', 'MEAN_2'))]
+    std = float(cfg.get('PREPROCESS', 'STD_0'))
     if width_scale != 1.0:
         channels = [[int(cij * width_scale) for cij in ci] for ci in channels]
 
     net = MobileNet(channels=channels,
                     first_stage_stride=first_stage_stride,
-                    bit_width=bit_width)
+                    bit_width=bit_width,
+                    mean=mean,
+                    std=std)
     return net
