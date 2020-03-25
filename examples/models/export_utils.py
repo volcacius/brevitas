@@ -191,7 +191,7 @@ def hls_threshold_matrix(
     output_min_int_val = output_tensor_quant.int_quant.min_int(output_bit_width)
     output_max_int_val = output_tensor_quant.int_quant.max_int(output_bit_width)
     output_scale_factor = activation.quant_act_scale().view(-1)
-    output_all_int_val = torch.linspace(output_min_int_val, output_max_int_val, device=output_scale_factor.device)
+    output_all_int_val = torch.arange(output_min_int_val, output_max_int_val + 1, device=output_scale_factor.device)
     output_all_val = torch.ger(output_scale_factor, output_all_int_val).squeeze()
     # switch to numpy
     output_all_val = output_all_val.detach().cpu().numpy()
