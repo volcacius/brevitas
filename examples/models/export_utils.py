@@ -175,10 +175,11 @@ def hls_threshold_matrix(
         # stop is not included, so last value is stop -1
         end=2 ** (acc_bit_width - 1),
         # all possible int values resulting from accumulation
-        dtype=torch.float32,
+        dtype=torch.float64, # float32 is not enough for the first layer
         device=acc_scale_factor.device)
     assert (acc_scale_factor >= 0.0).all()
-    input_range = torch.ger(acc_scale_factor, int_input_range)
+    input_range = torch.ger(acc_scale_factor.type(torch.float64), int_input_range)
+    input_range = input_range.type(torch.float32)
     # all possible float values resulting from accumulation
     # and add and mul coefficients from previous layers, per output channel
     input_range = input_range + acc_bias_factor.view(-1, 1)
