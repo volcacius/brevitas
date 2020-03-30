@@ -8,7 +8,7 @@ def hls_weight_matrix(conv, sign_factor):
     weight_matrix = np.transpose(weight_matrix, axes=transpose_axes)
     weight_matrix = np.rot90(weight_matrix, axes=(1, 2))
     weight_matrix = np.flip(weight_matrix, axis=1)  # flip along input channel
-    weight_matrix *= np.reshape(sign_factor.int().detach().cpu().numpy(), newshape=[-1, 1, 1, 1])
+    weight_matrix = weight_matrix * np.reshape(sign_factor.int().detach().cpu().numpy(), newshape=[-1, 1, 1, 1])
     weight_matrix = weight_matrix.astype('object')
     return weight_matrix
 
@@ -47,7 +47,7 @@ def hls_weight_string(conv, hls_var_name, weight_bit_width, sign_factor, simd=No
     return matrix_string
 
 
-def hls_config_string(conv, name, weight_bit_width, input_2d_shape, output_2d_shape, simd=None, pe=None):
+def hls_config_string(conv, name, weight_bit_width, output_bit_width, input_2d_shape, output_2d_shape, simd=None, pe=None):
     simd = simd if simd is not None else conv.in_channels // conv.groups
     pe = pe if pe is not None else conv.out_channels
     config_string_list = []
@@ -62,6 +62,7 @@ def hls_config_string(conv, name, weight_bit_width, input_2d_shape, output_2d_sh
     config_string_list.append(define('OFM_CHANNELS_{}'.format(name), conv.out_channels))
     config_string_list.append(define('STRIDE_{}'.format(name), conv.stride[0]))
     config_string_list.append(define('PADDING_{}'.format(name), conv.padding[0]))
+    config_string_list.append(define('OUTPUT_WIDTH_{}'.format(name), output_bit_width))
     config_string_list.append('\n')
     return ''.join(config_string_list)
 
@@ -141,10 +142,11 @@ def scale_bias_fusion(bn, scale_factor_init, bias_factor_init):
     else:
         bias_factor = bias_factor_init
     std_dev = torch.sqrt(bn.running_var + bn.eps).view(-1)
-    scale_factor *= 1.0 / std_dev
-    bias_factor += - bn.running_mean.view(-1) / std_dev
+    scale_factor = scale_factor / std_dev
+    bias_factor = bias_factor - bn.running_mean.view(-1)
+    bias_factor = bias_factor / std_dev
     if bn.affine:
-        scale_factor *= bn.weight.data.view(-1)
+        scale_factor = scale_factor * bn.weight.data.view(-1)
         bias_factor = bias_factor * bn.weight.data.view(-1) + bn.bias.data.view(-1)
     sign_factor = torch.sign(scale_factor)
     scale_factor = torch.abs(scale_factor)
@@ -179,7 +181,7 @@ def hls_threshold_matrix(
     input_range = torch.ger(acc_scale_factor, int_input_range)
     # all possible float values resulting from accumulation
     # and add and mul coefficients from previous layers, per output channel
-    input_range += acc_bias_factor.view(-1, 1)
+    input_range = input_range + acc_bias_factor.view(-1, 1)
     # all possible float values resulting from the activation,
     # given the add and mul coefficients from previous layers
     input_range = input_range.view(1, input_range.shape[0], input_range.shape[1], 1)

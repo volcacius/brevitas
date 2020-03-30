@@ -41,7 +41,7 @@ from .export_utils import *
 
 FIRST_LAYER_BIT_WIDTH = 8
 EXPORT = True
-
+NUM_LAYERS = 28
 
 class DwsConvBlock(nn.Module):
     def __init__(self,
@@ -67,10 +67,10 @@ class DwsConvBlock(nn.Module):
                                  act_bit_width=bit_width,
                                  activation_scaling_per_channel=pw_activation_scaling_per_channel)
 
-    def export(self, name_prefix):
+    def export(self, name_prefix, simd_dw, simd_pw, pe_dw, pe_pw):
         export_list = []
-        export_list.extend(self.dw_conv.export(name_prefix + '_dw'))
-        export_list.extend(self.pw_conv.export(name_prefix + '_pw'))
+        export_list.extend(self.dw_conv.export(name_prefix + '_dw', simd_dw, pe_dw))
+        export_list.extend(self.pw_conv.export(name_prefix + '_pw', simd_pw, pe_pw))
         return export_list
 
     def forward(self, x):
@@ -109,7 +109,7 @@ class ConvBlock(nn.Module):
                                           return_quant_tensor=True)
         self.mean = mean
         self.int_input = None
-        self.int_output = None
+        self.int_acc = None
         self.input_2d_shape = None
         self.output_2d_shape = None
         self.acc_scale = None
@@ -117,7 +117,7 @@ class ConvBlock(nn.Module):
         self.output_bit_width = None
         self.preprocessing_bias = None
 
-    def export(self, name_prefix):
+    def export(self, name_prefix, simd, pe):
         bias_factor_init = 0.0
         if self.conv.bias:
             bias_factor_init += self.conv.bias
@@ -128,6 +128,8 @@ class ConvBlock(nn.Module):
             scale_factor_init=self.acc_scale,
             bias_factor_init=bias_factor_init)
         acc_scale_factor, acc_bias_factor, weight_sign_factor = factors_tuple
+        if self.mean is not None:
+            acc_scale_factor = acc_scale_factor / 255.0
         # Threshold
         threshold = hls_threshold_string(
             self.activation,
@@ -135,7 +137,8 @@ class ConvBlock(nn.Module):
             acc_bit_width=self.acc_bit_width,
             acc_scale_factor=acc_scale_factor,
             acc_bias_factor=acc_bias_factor,
-            output_bit_width=self.output_bit_width)
+            output_bit_width=self.output_bit_width,
+            pe=pe)
         # Weight
         weight_bit_width_impl = self.conv.weight_quant.tensor_quant.msb_clamp_bit_width_impl
         weight_bit_width = weight_bit_width_impl(getattr(self.conv.weight_quant, ZERO_HW_SENTINEL_NAME))
@@ -144,14 +147,19 @@ class ConvBlock(nn.Module):
             self.conv,
             weight_bit_width=weight_bit_width,
             hls_var_name='{}_weight'.format(name_prefix.lower()),
-            sign_factor=weight_sign_factor)
+            sign_factor=weight_sign_factor,
+            simd=simd,
+            pe=pe)
         # Config
         config_list = hls_config_string(
             self.conv,
             name_prefix.upper(),
             weight_bit_width=weight_bit_width,
+            output_bit_width=self.output_bit_width,
             input_2d_shape=self.input_2d_shape,
-            output_2d_shape=self.output_2d_shape)
+            output_2d_shape=self.output_2d_shape,
+            simd=simd,
+            pe=pe)
         # Int inp/output
         int_input = (name_prefix.lower() + '_int_input', self.int_input.detach().cpu().numpy())
         int_acc = (name_prefix.lower() + '_int_acc', self.int_acc.detach().cpu().numpy())
@@ -166,20 +174,24 @@ class ConvBlock(nn.Module):
         x = self.activation(x)
         if EXPORT:
             self.int_input = torch.round(inp.tensor / inp.scale).int()
-            self.int_acc = torch.round(acc.tensor / acc.scale).int()
+            # Need to incorporate the change of sign coming from batch norm
+            bn_sign = (self.bn.weight.view(-1).sign() * self.bn.running_var.view(-1).sign()).view(1, -1, 1, 1)
+            self.int_acc = bn_sign * torch.round(acc.tensor / acc.scale).int()
             self.input_2d_shape = (inp.tensor.shape[2], inp.tensor.shape[3])
             self.acc_scale = acc.scale.detach()
             self.acc_bit_width = acc.bit_width.int().item()
             self.output_bit_width = x.bit_width.int().item()
             self.output_2d_shape = (x.tensor.shape[2], x.tensor.shape[3])
             if self.mean is not None:
-                preproc_bias_input = - 255 * inp.scale * torch.tensor(self.mean, device=x.tensor.device).view(1, -1, 1, 1)
+                preproc_bias_input = - inp.scale * torch.tensor(self.mean, device=x.tensor.device).view(1, -1, 1, 1)
                 preproc_bias_input_shape = (inp.tensor.shape[0], inp.tensor.shape[1], *self.conv.kernel_size)
                 preproc_bias_input_expanded = preproc_bias_input.expand(preproc_bias_input_shape)
                 preproc_bias = self.conv(pack_quant_tensor(preproc_bias_input_expanded, 0.0, 0)).tensor
                 self.preprocessing_bias = preproc_bias
-                self.int_input = torch.round((inp.tensor - preproc_bias_input.expand_as(inp.tensor)) / inp.scale).int()
-                self.int_acc = torch.round((acc.tensor - preproc_bias.expand_as(acc.tensor) / acc.scale)).int()
+                int_input = (inp.tensor - preproc_bias_input.expand_as(inp.tensor)) * 255.0 / inp.scale
+                int_acc = bn_sign * (acc.tensor - preproc_bias.expand_as(acc.tensor)) * 255.0 / acc.scale
+                self.int_input = torch.round(int_input).int()
+                self.int_acc = torch.round(int_acc).int()
         return x
 
 
@@ -189,6 +201,8 @@ class MobileNet(nn.Module):
                  channels,
                  first_stage_stride,
                  bit_width,
+                 simd_list,
+                 pe_list,
                  in_channels=3,
                  num_classes=1000,
                  mean=None,
@@ -231,17 +245,29 @@ class MobileNet(nn.Module):
                                         weight_scaling_per_output_channel=False)
         self.avg_pool_int_input = None
         self.fc_int_input = None
+        self.simd_list = simd_list
+        self.pe_list = pe_list
 
     def export(self, input_sample):
         self.eval()
         with torch.no_grad():
             self.forward(input_sample)
         export_list = []
-        export_list.extend(self.features[0].export(name_prefix='conv0'))
+        export_list.extend(self.features[0].export(
+            name_prefix='conv0',
+            simd=self.simd_list[0],
+            pe=self.pe_list[0]))
+        export_index = 1
         for i, stage in enumerate(self.features[1:]):
             for j, block in enumerate(stage):
                 name_prefix = 'layer{}_block{}'.format(i, j)
-                export_list.extend(block.export(name_prefix=name_prefix))
+                export_list.extend(block.export(
+                    name_prefix=name_prefix,
+                    simd_dw=self.simd_list[export_index],
+                    simd_pw=self.simd_list[export_index + 1],
+                    pe_dw=self.pe_list[export_index],
+                    pe_pw=self.pe_list[export_index + 1]))
+                export_index += 2
         export_list_list = [list(i) for i in zip(*export_list)]
         weight_list, threshold_list, config_list, int_input_list, int_acc_list = export_list_list
         int_input_list.append(('avg_pool_int_input', self.avg_pool_int_input.detach().cpu().numpy()))
@@ -266,7 +292,7 @@ class MobileNet(nn.Module):
         return weight_list, threshold_list, config_list, int_input_list, int_acc_list
 
     def forward(self, x):
-        x = pack_quant_tensor(x, 1.0 / torch.tensor(self.std * 255.0).to(x.device), torch.tensor(8.0).to(x.device))
+        x = pack_quant_tensor(x, 1.0 / self.std, torch.tensor(8.0).to(x.device))
         quant_tensor = self.features(x)
         x, scale, bit_width = self.final_pool(quant_tensor)
         x = x.view(x.size(0), -1)
@@ -286,6 +312,11 @@ def quant_mobilenet_v1(cfg):
     mean = [float(cfg.get('PREPROCESS', 'MEAN_0')), float(cfg.get('PREPROCESS', 'MEAN_1')),
             float(cfg.get('PREPROCESS', 'MEAN_2'))]
     std = float(cfg.get('PREPROCESS', 'STD_0'))
+    try:
+        simd_list = list(map(int, cfg.get('EXPORT', 'SIMD').split(',')))
+        pe_list = list(map(int, cfg.get('EXPORT', 'PE').split(',')))
+    except:
+        simd_list = pe_list = [None for i in range(NUM_LAYERS)]
     if width_scale != 1.0:
         channels = [[int(cij * width_scale) for cij in ci] for ci in channels]
 
@@ -293,5 +324,7 @@ def quant_mobilenet_v1(cfg):
                     first_stage_stride=first_stage_stride,
                     bit_width=bit_width,
                     mean=mean,
-                    std=std)
+                    std=std,
+                    simd_list=simd_list,
+                    pe_list=pe_list)
     return net
