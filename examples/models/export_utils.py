@@ -1,21 +1,31 @@
 import numpy as np
 import torch
+from functools import reduce
+from operator import mul
 
 
-def hls_weight_matrix(conv, sign_factor):
+def hls_weight_matrix_conv(conv, sign_factor=None):
     weight_matrix = conv.int_weight.detach().cpu().numpy()
     transpose_axes = (0, 3, 2, 1)
     weight_matrix = np.transpose(weight_matrix, axes=transpose_axes)
     weight_matrix = np.rot90(weight_matrix, axes=(1, 2))
     weight_matrix = np.flip(weight_matrix, axis=1)  # flip along input channel
-    weight_matrix = weight_matrix * np.reshape(sign_factor.int().detach().cpu().numpy(), newshape=[-1, 1, 1, 1])
+    if sign_factor is not None:
+        weight_matrix = weight_matrix * np.reshape(sign_factor.int().detach().cpu().numpy(), newshape=[-1, 1, 1, 1])
+    weight_matrix = weight_matrix.astype('object')
+    return weight_matrix
+
+
+def hls_weight_matrix_fc(fc):
+    weight_matrix = fc.int_weight.detach().cpu().numpy()
+    weight_matrix = np.flip(weight_matrix, axis=1)  # flip along input channel
     weight_matrix = weight_matrix.astype('object')
     return weight_matrix
 
 
 def hls_weight_matrix_simd_pe(weight_matrix, bit_width, simd, pe):
     matrix_height = weight_matrix.shape[0]
-    matrix_width = weight_matrix.shape[1] * weight_matrix.shape[2] * weight_matrix.shape[3]
+    matrix_width = reduce(mul, weight_matrix.shape[1:], 1)
     assert matrix_width % simd == 0
     assert matrix_height % pe == 0
     weight_matrix = weight_matrix.reshape((matrix_height, matrix_width // simd, simd))
@@ -32,28 +42,43 @@ def hls_weight_matrix_simd_pe(weight_matrix, bit_width, simd, pe):
     return weight_matrix_simd_pe
 
 
-def hls_weight_string(conv, hls_var_name, weight_bit_width, sign_factor, simd=None, pe=None, hex_repr=True):
+def hls_weight_string_conv(conv, hls_var_name, weight_bit_width, sign_factor, simd=None, pe=None, hex_repr=True):
     simd = simd if simd is not None else conv.in_channels // conv.groups
     pe = pe if pe is not None else conv.out_channels
-    weight_matrix = hls_weight_matrix(conv, sign_factor)
+    weight_matrix = hls_weight_matrix_conv(conv, sign_factor)
     weight_matrix_simd_pe = hls_weight_matrix_simd_pe(weight_matrix, weight_bit_width, simd, pe)
-    matrix_string = hls_matrix_string(weight_matrix_simd_pe, signature_style='conv', hex_repr=hex_repr)
+    matrix_string = hls_matrix_string(weight_matrix_simd_pe, signature_style='weights', hex_repr=hex_repr)
     matrix_string = matrix_string.format(
         bit_width=weight_bit_width,
         hls_var_name=hls_var_name,
         simd=simd,
         pe=pe,
-        tile=tile(conv, simd, pe))
+        tile=tile_conv(conv, simd, pe))
     return matrix_string
 
 
-def hls_config_string(conv, name, weight_bit_width, output_bit_width, input_2d_shape, output_2d_shape, simd=None, pe=None):
+def hls_weight_string_fc(fc, hls_var_name, weight_bit_width, simd=None, pe=None, hex_repr=True):
+    simd = simd if simd is not None else fc.in_features
+    pe = pe if pe is not None else fc.out_features
+    weight_matrix = hls_weight_matrix_fc(fc)
+    weight_matrix_simd_pe = hls_weight_matrix_simd_pe(weight_matrix, weight_bit_width, simd, pe)
+    matrix_string = hls_matrix_string(weight_matrix_simd_pe, signature_style='weights', hex_repr=hex_repr)
+    matrix_string = matrix_string.format(
+        bit_width=weight_bit_width,
+        hls_var_name=hls_var_name,
+        simd=simd,
+        pe=pe,
+        tile=tile_fc(fc, simd, pe))
+    return matrix_string
+
+
+def hls_config_string_conv(conv, name, weight_bit_width, output_bit_width, input_2d_shape, output_2d_shape, simd=None, pe=None):
     simd = simd if simd is not None else conv.in_channels // conv.groups
     pe = pe if pe is not None else conv.out_channels
     config_string_list = []
     config_string_list.append(define('SIMD_{}'.format(name), simd))
     config_string_list.append(define('PE_{}'.format(name), pe))
-    config_string_list.append(define('TILE_{}'.format(name), tile(conv, simd, pe)))
+    config_string_list.append(define('TILE_{}'.format(name), tile_conv(conv, simd, pe)))
     config_string_list.append(define('WIDTH_{}'.format(name), weight_bit_width))
     config_string_list.append(define('KERNEL_DIM_{}'.format(name), conv.kernel_size[0]))
     config_string_list.append(define('IFM_DIM_{}'.format(name), input_2d_shape[0]))
@@ -67,8 +92,27 @@ def hls_config_string(conv, name, weight_bit_width, output_bit_width, input_2d_s
     return ''.join(config_string_list)
 
 
-def tile(conv, simd, pe):
+def hls_config_string_fc(fc, name, weight_bit_width, output_bit_width, simd=None, pe=None):
+    simd = simd if simd is not None else fc.in_features
+    pe = pe if pe is not None else fc.out_features
+    config_string_list = []
+    config_string_list.append(define('SIMD_{}'.format(name), simd))
+    config_string_list.append(define('PE_{}'.format(name), pe))
+    config_string_list.append(define('TILE_{}'.format(name), tile_fc(fc, simd, pe)))
+    config_string_list.append(define('WIDTH_{}'.format(name), weight_bit_width))
+    config_string_list.append(define('IN_FEATURES_{}'.format(name), fc.in_features))
+    config_string_list.append(define('OUT_FEATURES_{}'.format(name), fc.out_features))
+    config_string_list.append(define('OUTPUT_WIDTH_{}'.format(name), output_bit_width))
+    config_string_list.append('\n')
+    return ''.join(config_string_list)
+
+
+def tile_conv(conv, simd, pe):
     return conv.kernel_size[0] * conv.kernel_size[1] * conv.in_channels * conv.out_channels // (simd * pe * conv.groups)
+
+
+def tile_fc(conv, simd, pe):
+    return conv.in_features * conv.out_features // (simd * pe)
 
 
 def define(name, val):
@@ -85,7 +129,7 @@ def hls_matrix_string(int_x, signature_style, hex_repr=True):
 
 
 def hls_matrix_string_signature(string_list, signature_style):
-    if signature_style == 'conv':
+    if signature_style == 'weights':
         string_list.append("static FixedPointWeights<{simd}, ap_int<{bit_width}>,{pe},{tile}> {hls_var_name} = ")
         return string_list
     elif signature_style == 'thresholds':

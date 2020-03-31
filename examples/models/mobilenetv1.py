@@ -143,7 +143,7 @@ class ConvBlock(nn.Module):
         weight_bit_width_impl = self.conv.weight_quant.tensor_quant.msb_clamp_bit_width_impl
         weight_bit_width = weight_bit_width_impl(getattr(self.conv.weight_quant, ZERO_HW_SENTINEL_NAME))
         weight_bit_width = weight_bit_width.int().item()
-        conv_weight = hls_weight_string(
+        conv_weight = hls_weight_string_conv(
             self.conv,
             weight_bit_width=weight_bit_width,
             hls_var_name='{}_weight'.format(name_prefix.lower()),
@@ -151,7 +151,7 @@ class ConvBlock(nn.Module):
             simd=simd,
             pe=pe)
         # Config
-        config_list = hls_config_string(
+        config_list = hls_config_string_conv(
             self.conv,
             name_prefix.upper(),
             weight_bit_width=weight_bit_width,
@@ -245,6 +245,8 @@ class MobileNet(nn.Module):
                                         weight_scaling_per_output_channel=False)
         self.avg_pool_int_input = None
         self.fc_int_input = None
+        self.avg_pool_output_bit_width = None
+        self.fc_output_bit_width = None
         self.simd_list = simd_list
         self.pe_list = pe_list
 
@@ -273,21 +275,25 @@ class MobileNet(nn.Module):
         int_input_list.append(('avg_pool_int_input', self.avg_pool_int_input.detach().cpu().numpy()))
         int_input_list.append(('fc_int_input', self.fc_int_input.detach().cpu().numpy()))
 
-        # # Weight
-        # name_prefix = 'fc'
-        # weight_bit_width_impl = self.output.weight_quant.tensor_quant.msb_clamp_bit_width_impl
-        # weight_bit_width = weight_bit_width_impl(getattr(self.output.weight_quant, ZERO_HW_SENTINEL_NAME))
-        # weight_bit_width = weight_bit_width.int().item()
-        # fc_weight = hls_weight_string(
-        #     self.output,
-        #     weight_bit_width=weight_bit_width,
-        #     hls_var_name='{}_weight'.format(name_prefix.lower()),
-        #     sign_factor=None)
-        # # Config
-        # config_list = hls_config_string_fc(
-        #     self.output,
-        #     name_prefix.upper(),
-        #     weight_bit_width=weight_bit_width)
+        # FC
+        name_prefix = 'fc'
+        weight_bit_width_impl = self.output.weight_quant.tensor_quant.msb_clamp_bit_width_impl
+        weight_bit_width = weight_bit_width_impl(getattr(self.output.weight_quant, ZERO_HW_SENTINEL_NAME))
+        weight_bit_width = weight_bit_width.int().item()
+        fc_weight = hls_weight_string_fc(
+            self.output,
+            weight_bit_width=weight_bit_width,
+            hls_var_name='{}_weight'.format(name_prefix.lower()))
+        weight_list.append(fc_weight)
+
+        # Config
+        fc_config_list = hls_config_string_fc(
+            self.output,
+            name_prefix.upper(),
+            weight_bit_width=weight_bit_width,
+            output_bit_width=self.fc_output_bit_width)
+        config_list.append(define('OUTPUT_WIDTH_AVG_POOL', self.avg_pool_output_bit_width))
+        config_list.append(fc_config_list)
 
         return weight_list, threshold_list, config_list, int_input_list, int_acc_list
 
@@ -300,7 +306,9 @@ class MobileNet(nn.Module):
         if EXPORT:
             self.avg_pool_int_input = torch.round(quant_tensor.tensor / quant_tensor.scale).int()
             self.fc_int_input = torch.round(x / scale).int()
-        return out
+            self.avg_pool_output_bit_width = bit_width.int().item()
+            self.fc_output_bit_width = out.bit_width.int().item()
+        return out.tensor
 
 
 def quant_mobilenet_v1(cfg):
