@@ -170,7 +170,8 @@ def hls_matrix_string_signature(string_list, signature_style):
             "1,"
             "ap_int<{bias_bit_width}>,"
             "ap_int<{output_bit_width}>,"
-            "0> {hls_var_name} = ")
+            "0,"
+            "std::plus<ap_int<{output_bit_width}>>> {hls_var_name} = ")
         return string_list
     else:
         raise Exception("Signature style not recognized: {}".format(signature_style))
