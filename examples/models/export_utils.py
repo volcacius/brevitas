@@ -18,7 +18,6 @@ def hls_weight_matrix_conv(conv, sign_factor=None):
 
 def hls_weight_matrix_fc(fc):
     weight_matrix = fc.int_weight.detach().cpu().numpy()
-    weight_matrix = np.flip(weight_matrix, axis=1)  # flip along input channel
     weight_matrix = weight_matrix.astype('object')
     return weight_matrix
 
@@ -54,6 +53,27 @@ def hls_weight_string_conv(conv, hls_var_name, weight_bit_width, sign_factor, si
         simd=simd,
         pe=pe,
         tile=tile_conv(conv, simd, pe))
+    return matrix_string
+
+
+def hls_bias_string_fc(int_bias, hls_var_name, output_bit_width, bias_bit_width, pe=None, hex_repr=False):
+    pe = pe if pe is not None else len(int_bias.view(-1))
+    bias_matrix = int_bias.view(-1, 1).cpu().numpy()
+    matrix_height = bias_matrix.shape[0]
+    bias_matrix_pe = hls_bias_matrix_pe(
+        bias_matrix=bias_matrix,
+        bias_bit_width=bias_bit_width,
+        pe=pe,
+        matrix_height=matrix_height,
+        pack=False)
+    bias_matrix_pe = np.expand_dims(bias_matrix_pe, axis=0)
+    matrix_string = hls_matrix_string(bias_matrix_pe, signature_style='bias', hex_repr=hex_repr)
+    matrix_string = matrix_string.format(
+        neuron_folding=matrix_height // pe,
+        pe=pe,
+        bias_bit_width=bias_bit_width,
+        output_bit_width=output_bit_width,
+        hls_var_name=hls_var_name)
     return matrix_string
 
 
@@ -141,6 +161,16 @@ def hls_matrix_string_signature(string_list, signature_style):
             "ap_int<{threshold_bit_width}>,"
             "ap_int<{precision}>,"
             "{starting_value}> {hls_var_name} = ")
+        return string_list
+    elif signature_style == 'bias':
+        string_list.append(
+            "ThresholdsActivation"
+            "<{neuron_folding},"
+            "{pe},"
+            "1,"
+            "ap_int<{bias_bit_width}>,"
+            "ap_int<{output_bit_width}>,"
+            "0> {hls_var_name} = ")
         return string_list
     else:
         raise Exception("Signature style not recognized: {}".format(signature_style))
@@ -298,6 +328,25 @@ def hls_threshold_matrix(
     threshold_matrix = int_input_range.int().cpu().numpy()[threshold_index_matrix]
     threshold_matrix = threshold_matrix.astype('object')
     return threshold_matrix
+
+
+def hls_bias_matrix_pe(
+        bias_matrix,
+        matrix_height,
+        bias_bit_width,
+        pack,
+        pe):
+    assert len(bias_matrix.shape) == 2
+    assert bias_matrix.shape[1] == 1
+    assert matrix_height % pe == 0
+    shape = (pe, matrix_height // pe) if pack else (pe, matrix_height // pe, 1)
+    bias_pe = np.zeros(shape=shape, dtype='object')
+    for i in range(0, matrix_height):
+        target_pe = i % pe
+        offset_pe = i // pe
+        val = pack_array(bias_matrix[i], bias_bit_width) if pack else bias_matrix[i]
+        bias_pe[target_pe, offset_pe - matrix_height // pe] = val
+    return bias_pe
 
 
 def hls_threshold_matrix_pe(

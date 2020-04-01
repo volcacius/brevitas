@@ -245,8 +245,13 @@ class MobileNet(nn.Module):
                                         weight_scaling_per_output_channel=False)
         self.avg_pool_int_input = None
         self.fc_int_input = None
+        self.fc_int_output = None
+        self.fc_int_bias = None
+        self.avg_pool_post_sum_bit_width = None
         self.avg_pool_output_bit_width = None
+        self.fc_weight_bit_width = None
         self.fc_output_bit_width = None
+        self.fc_bias_bit_width = None
         self.simd_list = simd_list
         self.pe_list = pe_list
 
@@ -274,24 +279,28 @@ class MobileNet(nn.Module):
         weight_list, threshold_list, config_list, int_input_list, int_acc_list = export_list_list
         int_input_list.append(('avg_pool_int_input', self.avg_pool_int_input.detach().cpu().numpy()))
         int_input_list.append(('fc_int_input', self.fc_int_input.detach().cpu().numpy()))
-
+        int_input_list.append(('fc_int_output', self.fc_int_output.detach().cpu().numpy()))
         # FC
         name_prefix = 'fc'
-        weight_bit_width_impl = self.output.weight_quant.tensor_quant.msb_clamp_bit_width_impl
-        weight_bit_width = weight_bit_width_impl(getattr(self.output.weight_quant, ZERO_HW_SENTINEL_NAME))
-        weight_bit_width = weight_bit_width.int().item()
         fc_weight = hls_weight_string_fc(
             self.output,
-            weight_bit_width=weight_bit_width,
+            weight_bit_width=self.fc_weight_bit_width,
             hls_var_name='{}_weight'.format(name_prefix.lower()))
         weight_list.append(fc_weight)
-
+        fc_bias = hls_bias_string_fc(
+            self.fc_int_bias,
+            bias_bit_width=self.fc_bias_bit_width,
+            output_bit_width=self.fc_output_bit_width,
+            hls_var_name='{}_bias'.format(name_prefix.lower()))
+        weight_list.append(fc_bias)
         # Config
         fc_config_list = hls_config_string_fc(
             self.output,
             name_prefix.upper(),
-            weight_bit_width=weight_bit_width,
+            weight_bit_width=self.fc_weight_bit_width,
             output_bit_width=self.fc_output_bit_width)
+        config_list.append(define('POST_SUM_WIDTH_AVG_POOL', self.avg_pool_post_sum_bit_width))
+        config_list.append(define('TRUNCATE_WIDTH_AVG_POOL', self.avg_pool_post_sum_bit_width - self.avg_pool_output_bit_width))
         config_list.append(define('OUTPUT_WIDTH_AVG_POOL', self.avg_pool_output_bit_width))
         config_list.append(fc_config_list)
 
@@ -306,8 +315,16 @@ class MobileNet(nn.Module):
         if EXPORT:
             self.avg_pool_int_input = torch.round(quant_tensor.tensor / quant_tensor.scale).int()
             self.fc_int_input = torch.round(x / scale).int()
+            self.fc_int_output = torch.round(out.tensor / out.scale).int()
+            self.avg_pool_post_sum_bit_width = self.final_pool.max_output_bit_width(quant_tensor.bit_width).int().item()
             self.avg_pool_output_bit_width = bit_width.int().item()
             self.fc_output_bit_width = out.bit_width.int().item()
+            fc_weight_bit_width_impl = self.output.weight_quant.tensor_quant.msb_clamp_bit_width_impl
+            fc_weight_bit_width = fc_weight_bit_width_impl(getattr(self.output.weight_quant, ZERO_HW_SENTINEL_NAME))
+            self.fc_weight_bit_width = fc_weight_bit_width.int().item()
+            fc_bias = self.output.bias_quant(self.output.bias, out.scale, self.output.max_output_bit_width(bit_width, fc_weight_bit_width))
+            self.fc_int_bias = torch.round(fc_bias[0] / fc_bias[1]).int()
+            self.fc_bias_bit_width = fc_bias[2].int().item()
         return out.tensor
 
 
