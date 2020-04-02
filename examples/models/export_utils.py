@@ -4,20 +4,54 @@ from functools import reduce
 from operator import mul
 
 
-def hls_weight_matrix_conv(conv, sign_factor=None):
+def is_depthwise(conv):
+    return conv.in_channels == conv.out_channels == conv.groups
+
+
+def prune_weight_matrix(weight_matrix, in_ch_pruning_mask, out_ch_pruning_mask, is_depthwise):
+    if is_depthwise:
+        if out_ch_pruning_mask is not None and in_ch_pruning_mask is not None:
+            weight_matrix = weight_matrix[np.logical_and(out_ch_pruning_mask, in_ch_pruning_mask)]
+        elif out_ch_pruning_mask is None and in_ch_pruning_mask is not None:
+            weight_matrix = weight_matrix[in_ch_pruning_mask]
+        elif out_ch_pruning_mask is not None and in_ch_pruning_mask is None:
+            weight_matrix = weight_matrix[out_ch_pruning_mask]
+    else:
+        if out_ch_pruning_mask is not None and in_ch_pruning_mask is not None:
+            weight_matrix = weight_matrix[out_ch_pruning_mask][:, in_ch_pruning_mask]
+        elif out_ch_pruning_mask is None and in_ch_pruning_mask is not None:
+            weight_matrix = weight_matrix[:, in_ch_pruning_mask]
+        elif out_ch_pruning_mask is not None and in_ch_pruning_mask is None:
+            weight_matrix = weight_matrix[out_ch_pruning_mask]
+    return weight_matrix
+
+
+def hls_weight_matrix_conv(conv, in_ch_pruning_mask=None, out_ch_pruning_mask=None, sign_factor=None):
     weight_matrix = conv.int_weight.detach().cpu().numpy()
+    weight_matrix = prune_weight_matrix(weight_matrix, in_ch_pruning_mask, out_ch_pruning_mask, is_depthwise(conv))
     transpose_axes = (0, 3, 2, 1)
     weight_matrix = np.transpose(weight_matrix, axes=transpose_axes)
     weight_matrix = np.rot90(weight_matrix, axes=(1, 2))
     weight_matrix = np.flip(weight_matrix, axis=1)  # flip along input channel
     if sign_factor is not None:
-        weight_matrix = weight_matrix * np.reshape(sign_factor.int().detach().cpu().numpy(), newshape=[-1, 1, 1, 1])
+        sign_factor = sign_factor.int().detach().cpu().numpy()
+        if out_ch_pruning_mask is not None:
+            sign_factor = sign_factor[out_ch_pruning_mask]
+        weight_matrix = weight_matrix * np.reshape(sign_factor, newshape=[-1, 1, 1, 1])
     weight_matrix = weight_matrix.astype('object')
     return weight_matrix
 
 
-def hls_weight_matrix_fc(fc):
+def weight_matrix_conv_pruning_mask(conv):
+    weight_matrix = conv.int_weight.detach().cpu().numpy()
+    weight_matrix = np.reshape(weight_matrix, newshape=[weight_matrix.shape[0], -1])
+    out_ch_pruning_mask = weight_matrix.any(axis=1)
+    return out_ch_pruning_mask
+
+
+def hls_weight_matrix_fc(fc, in_ch_pruning_mask):
     weight_matrix = fc.int_weight.detach().cpu().numpy()
+    weight_matrix = prune_weight_matrix(weight_matrix, in_ch_pruning_mask, None, False)
     weight_matrix = weight_matrix.astype('object')
     return weight_matrix
 
@@ -41,10 +75,14 @@ def hls_weight_matrix_simd_pe(weight_matrix, bit_width, simd, pe):
     return weight_matrix_simd_pe
 
 
-def hls_weight_string_conv(conv, hls_var_name, weight_bit_width, sign_factor, simd=None, pe=None, hex_repr=True):
-    simd = simd if simd is not None else conv.in_channels // conv.groups
-    pe = pe if pe is not None else conv.out_channels
-    weight_matrix = hls_weight_matrix_conv(conv, sign_factor)
+def hls_weight_string_conv(conv, hls_var_name, weight_bit_width, sign_factor, in_ch_pruning_mask=None, out_ch_pruning_mask=None, simd=None, pe=None, hex_repr=True):
+    weight_matrix = hls_weight_matrix_conv(conv, in_ch_pruning_mask, out_ch_pruning_mask, sign_factor)
+    if is_depthwise(conv):
+        simd = simd if simd is not None else 1
+        pe = pe if pe is not None else weight_matrix.shape[0]  # output channels
+    else:
+        simd = simd if simd is not None else weight_matrix.shape[1]  # input channels
+        pe = pe if pe is not None else weight_matrix.shape[0]  # output channels
     weight_matrix_simd_pe = hls_weight_matrix_simd_pe(weight_matrix, weight_bit_width, simd, pe)
     matrix_string = hls_matrix_string(weight_matrix_simd_pe, signature_style='weights', hex_repr=hex_repr)
     matrix_string = matrix_string.format(
@@ -77,10 +115,10 @@ def hls_bias_string_fc(int_bias, hls_var_name, output_bit_width, bias_bit_width,
     return matrix_string
 
 
-def hls_weight_string_fc(fc, hls_var_name, weight_bit_width, simd=None, pe=None, hex_repr=True):
+def hls_weight_string_fc(fc, hls_var_name, weight_bit_width, in_ch_pruning_mask=None, simd=None, pe=None, hex_repr=True):
     simd = simd if simd is not None else fc.in_features
     pe = pe if pe is not None else fc.out_features
-    weight_matrix = hls_weight_matrix_fc(fc)
+    weight_matrix = hls_weight_matrix_fc(fc, in_ch_pruning_mask)
     weight_matrix_simd_pe = hls_weight_matrix_simd_pe(weight_matrix, weight_bit_width, simd, pe)
     matrix_string = hls_matrix_string(weight_matrix_simd_pe, signature_style='weights', hex_repr=hex_repr)
     matrix_string = matrix_string.format(
@@ -92,9 +130,15 @@ def hls_weight_string_fc(fc, hls_var_name, weight_bit_width, simd=None, pe=None,
     return matrix_string
 
 
-def hls_config_string_conv(conv, name, weight_bit_width, output_bit_width, input_2d_shape, output_2d_shape, simd=None, pe=None):
-    simd = simd if simd is not None else conv.in_channels // conv.groups
-    pe = pe if pe is not None else conv.out_channels
+def hls_config_string_conv(conv, name, weight_bit_width, output_bit_width, input_2d_shape, output_2d_shape, in_ch_pruning_mask, out_ch_pruning_mask, simd=None, pe=None):
+    in_ch = np.count_nonzero(in_ch_pruning_mask) if in_ch_pruning_mask is not None else conv.in_channels
+    out_ch = np.count_nonzero(out_ch_pruning_mask) if out_ch_pruning_mask is not None else conv.out_channels
+    if is_depthwise(conv):
+        simd = simd if simd is not None else 1
+        pe = pe if pe is not None else out_ch
+    else:
+        simd = simd if simd is not None else in_ch
+        pe = pe if pe is not None else out_ch
     config_string_list = []
     config_string_list.append(define('SIMD_{}'.format(name), simd))
     config_string_list.append(define('PE_{}'.format(name), pe))
@@ -103,8 +147,8 @@ def hls_config_string_conv(conv, name, weight_bit_width, output_bit_width, input
     config_string_list.append(define('KERNEL_DIM_{}'.format(name), conv.kernel_size[0]))
     config_string_list.append(define('IFM_DIM_{}'.format(name), input_2d_shape[0]))
     config_string_list.append(define('OFM_DIM_{}'.format(name), output_2d_shape[0]))
-    config_string_list.append(define('IFM_CHANNELS_{}'.format(name), conv.in_channels))
-    config_string_list.append(define('OFM_CHANNELS_{}'.format(name), conv.out_channels))
+    config_string_list.append(define('IFM_CHANNELS_{}'.format(name), in_ch))
+    config_string_list.append(define('OFM_CHANNELS_{}'.format(name), out_ch))
     config_string_list.append(define('STRIDE_{}'.format(name), conv.stride[0]))
     config_string_list.append(define('PADDING_{}'.format(name), conv.padding[0]))
     config_string_list.append(define('OUTPUT_WIDTH_{}'.format(name), output_bit_width))
@@ -112,15 +156,16 @@ def hls_config_string_conv(conv, name, weight_bit_width, output_bit_width, input
     return ''.join(config_string_list)
 
 
-def hls_config_string_fc(fc, name, weight_bit_width, output_bit_width, simd=None, pe=None):
-    simd = simd if simd is not None else fc.in_features
+def hls_config_string_fc(fc, name, weight_bit_width, output_bit_width, in_ch_pruning_mask=None, simd=None, pe=None):
+    in_ch = np.count_nonzero(in_ch_pruning_mask) if in_ch_pruning_mask is not None else fc.in_features
+    simd = simd if simd is not None else in_ch
     pe = pe if pe is not None else fc.out_features
     config_string_list = []
     config_string_list.append(define('SIMD_{}'.format(name), simd))
     config_string_list.append(define('PE_{}'.format(name), pe))
     config_string_list.append(define('TILE_{}'.format(name), tile_fc(fc, simd, pe)))
     config_string_list.append(define('WIDTH_{}'.format(name), weight_bit_width))
-    config_string_list.append(define('IN_FEATURES_{}'.format(name), fc.in_features))
+    config_string_list.append(define('IN_FEATURES_{}'.format(name), in_ch))
     config_string_list.append(define('OUT_FEATURES_{}'.format(name), fc.out_features))
     config_string_list.append(define('OUTPUT_WIDTH_{}'.format(name), output_bit_width))
     config_string_list.append('\n')
@@ -244,7 +289,8 @@ def hls_threshold_matrix(
         activation,
         acc_bit_width,
         acc_scale_factor,
-        acc_bias_factor):
+        acc_bias_factor,
+        out_ch_pruning_mask=None):
     int_input_range = torch.arange(
         start=- 2 ** (acc_bit_width - 1),
         # stop is not included, so last value is stop -1
@@ -276,9 +322,12 @@ def hls_threshold_matrix(
     output_range = output_range.detach().cpu().numpy()
     output_bit_width = output_bit_width.int().item()
     unique_index_list = []
+    new_out_ch_pruning_mask = []
     # iterate over output channels
     for i in range(output_range.shape[0]):
         unique_value_index = np.unique(output_range[i, :], return_index=True)
+        nonzero_ch = np.any(unique_value_index[0])
+        new_out_ch_pruning_mask.append(nonzero_ch)
         # get all val per output channel or not
         output_all_val_vec = output_all_val[i, :] if len(output_all_val.shape) == 2 else output_all_val
         min_generated_value = unique_value_index[0][0]
@@ -327,8 +376,13 @@ def hls_threshold_matrix(
     threshold_index_matrix = (unique_index_matrix - 1).astype(np.int64)
     # get the corresponding thresholds using fancy indexing
     threshold_matrix = int_input_range.int().cpu().numpy()[threshold_index_matrix]
+    # convert pruning list to array
+    new_out_ch_pruning_mask = np.array(new_out_ch_pruning_mask)
+    if out_ch_pruning_mask is not None:
+        new_out_ch_pruning_mask = np.logical_and(new_out_ch_pruning_mask, out_ch_pruning_mask)
+    threshold_matrix = threshold_matrix[new_out_ch_pruning_mask]  # select non pruned channels
     threshold_matrix = threshold_matrix.astype('object')
-    return threshold_matrix
+    return threshold_matrix, new_out_ch_pruning_mask
 
 
 def hls_bias_matrix_pe(
@@ -375,18 +429,20 @@ def hls_threshold_string(
         acc_bit_width,
         acc_scale_factor,
         acc_bias_factor,
+        out_ch_pruning_mask=None,
         pe=None,
         starting_value=0,
         pack=False,
         hex_repr=False):
-    pe = pe if pe is not None else len(acc_scale_factor)
-    threshold_matrix = hls_threshold_matrix(
+    threshold_matrix, out_ch_pruning_mask = hls_threshold_matrix(
         activation=activation,
         acc_bit_width=acc_bit_width,
         acc_scale_factor=acc_scale_factor,
-        acc_bias_factor=acc_bias_factor)
+        acc_bias_factor=acc_bias_factor,
+        out_ch_pruning_mask=out_ch_pruning_mask)
     matrix_height = threshold_matrix.shape[0]
     num_thresholds = threshold_matrix.shape[1]
+    pe = pe if pe is not None else matrix_height
     threshold_matrix_pe = hls_threshold_matrix_pe(
         thresholds_matrix=threshold_matrix,
         matrix_height=matrix_height,
@@ -408,5 +464,5 @@ def hls_threshold_string(
         precision=output_bit_width,
         starting_value=starting_value,
         hls_var_name=hls_var_name)
-    return matrix_string
+    return matrix_string, out_ch_pruning_mask
 

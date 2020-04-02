@@ -67,11 +67,13 @@ class DwsConvBlock(nn.Module):
                                  act_bit_width=bit_width,
                                  activation_scaling_per_channel=pw_activation_scaling_per_channel)
 
-    def export(self, name_prefix, simd_dw, simd_pw, pe_dw, pe_pw):
+    def export(self, name_prefix, simd_dw, simd_pw, pe_dw, pe_pw, in_ch_pruning_mask):
         export_list = []
-        export_list.extend(self.dw_conv.export(name_prefix + '_dw', simd_dw, pe_dw))
-        export_list.extend(self.pw_conv.export(name_prefix + '_pw', simd_pw, pe_pw))
-        return export_list
+        export_tuple, out_ch_pruning_mask = self.dw_conv.export(name_prefix + '_dw', simd_dw, pe_dw, in_ch_pruning_mask=in_ch_pruning_mask)
+        export_list.extend(export_tuple)
+        export_tuple, out_ch_pruning_mask = self.pw_conv.export(name_prefix + '_pw', simd_pw, pe_pw, in_ch_pruning_mask=out_ch_pruning_mask)
+        export_list.extend(export_tuple)
+        return export_list, out_ch_pruning_mask
 
     def forward(self, x):
         x = self.dw_conv(x)
@@ -117,7 +119,7 @@ class ConvBlock(nn.Module):
         self.output_bit_width = None
         self.preprocessing_bias = None
 
-    def export(self, name_prefix, simd, pe):
+    def export(self, name_prefix, simd, pe, in_ch_pruning_mask):
         bias_factor_init = 0.0
         if self.conv.bias:
             bias_factor_init += self.conv.bias
@@ -130,14 +132,20 @@ class ConvBlock(nn.Module):
         acc_scale_factor, acc_bias_factor, weight_sign_factor = factors_tuple
         if self.mean is not None:
             acc_scale_factor = acc_scale_factor / 255.0
+
+        # Out channel pruning mask, start with the one based on weights only
+        out_ch_pruning_mask = weight_matrix_conv_pruning_mask(self.conv)
+
         # Threshold
-        threshold = hls_threshold_string(
+        # Update out channel pruning mask with the one from thresholds too
+        threshold, out_ch_pruning_mask = hls_threshold_string(
             self.activation,
             hls_var_name='{}_threshold'.format(name_prefix.lower()),
             acc_bit_width=self.acc_bit_width,
             acc_scale_factor=acc_scale_factor,
             acc_bias_factor=acc_bias_factor,
             output_bit_width=self.output_bit_width,
+            out_ch_pruning_mask=out_ch_pruning_mask,
             pe=pe)
         # Weight
         weight_bit_width_impl = self.conv.weight_quant.tensor_quant.msb_clamp_bit_width_impl
@@ -145,6 +153,8 @@ class ConvBlock(nn.Module):
         weight_bit_width = weight_bit_width.int().item()
         conv_weight = hls_weight_string_conv(
             self.conv,
+            in_ch_pruning_mask=in_ch_pruning_mask,
+            out_ch_pruning_mask=out_ch_pruning_mask,
             weight_bit_width=weight_bit_width,
             hls_var_name='{}_weight'.format(name_prefix.lower()),
             sign_factor=weight_sign_factor,
@@ -154,6 +164,8 @@ class ConvBlock(nn.Module):
         config_list = hls_config_string_conv(
             self.conv,
             name_prefix.upper(),
+            in_ch_pruning_mask=in_ch_pruning_mask,
+            out_ch_pruning_mask=out_ch_pruning_mask,
             weight_bit_width=weight_bit_width,
             output_bit_width=self.output_bit_width,
             input_2d_shape=self.input_2d_shape,
@@ -161,11 +173,17 @@ class ConvBlock(nn.Module):
             simd=simd,
             pe=pe)
         # Int inp/output
-        int_input = (name_prefix.lower() + '_int_input', self.int_input.detach().cpu().numpy())
-        int_acc = (name_prefix.lower() + '_int_acc', self.int_acc.detach().cpu().numpy())
+        int_input = self.int_input.detach().cpu().numpy()
+        if in_ch_pruning_mask is not None:
+            int_input = int_input[:, in_ch_pruning_mask]
+        int_acc = self.int_acc.detach().cpu().numpy()
+        if out_ch_pruning_mask is not None:
+            int_acc = int_acc[:, out_ch_pruning_mask]
+        int_input = (name_prefix.lower() + '_int_input', int_input)
+        int_acc = (name_prefix.lower() + '_int_acc', int_acc)
         # Return as a list of a single tuple
         export_tuple = (name_prefix, conv_weight), (name_prefix, threshold), config_list, int_input, int_acc
-        return [export_tuple]
+        return [export_tuple], out_ch_pruning_mask
 
     def forward(self, x):
         inp = x
@@ -260,30 +278,42 @@ class MobileNet(nn.Module):
         with torch.no_grad():
             self.forward(input_sample)
         export_list = []
-        export_list.extend(self.features[0].export(
+        in_ch_pruning_mask = None
+        export_tuple, out_ch_pruning_mask = self.features[0].export(
+            in_ch_pruning_mask=in_ch_pruning_mask,
             name_prefix='conv0',
             simd=self.simd_list[0],
-            pe=self.pe_list[0]))
+            pe=self.pe_list[0])
+        export_list.extend(export_tuple)
         export_index = 1
         for i, stage in enumerate(self.features[1:]):
             for j, block in enumerate(stage):
                 name_prefix = 'layer{}_block{}'.format(i, j)
-                export_list.extend(block.export(
+                export_tuple, out_ch_pruning_mask = block.export(
                     name_prefix=name_prefix,
+                    in_ch_pruning_mask=in_ch_pruning_mask,
                     simd_dw=self.simd_list[export_index],
                     simd_pw=self.simd_list[export_index + 1],
                     pe_dw=self.pe_list[export_index],
-                    pe_pw=self.pe_list[export_index + 1]))
+                    pe_pw=self.pe_list[export_index + 1])
+                export_list.extend(export_tuple)
                 export_index += 2
+                in_ch_pruning_mask = out_ch_pruning_mask
         export_list_list = [list(i) for i in zip(*export_list)]
         weight_list, threshold_list, config_list, int_input_list, int_acc_list = export_list_list
-        int_input_list.append(('avg_pool_int_input', self.avg_pool_int_input.detach().cpu().numpy()))
-        int_input_list.append(('fc_int_input', self.fc_int_input.detach().cpu().numpy()))
+        avg_pool_int_input = self.avg_pool_int_input.detach().cpu().numpy()
+        fc_int_input = self.fc_int_input.detach().cpu().numpy()
+        if in_ch_pruning_mask is not None:
+            avg_pool_int_input = avg_pool_int_input[:, in_ch_pruning_mask]
+            fc_int_input = fc_int_input[:,  in_ch_pruning_mask]
+        int_input_list.append(('avg_pool_int_input', avg_pool_int_input))
+        int_input_list.append(('fc_int_input', fc_int_input))
         int_input_list.append(('fc_int_output', self.fc_int_output.detach().cpu().numpy()))
         # FC
         name_prefix = 'fc'
         fc_weight = hls_weight_string_fc(
             self.output,
+            in_ch_pruning_mask=in_ch_pruning_mask,
             simd=self.simd_list[export_index],
             pe=self.pe_list[export_index],
             weight_bit_width=self.fc_weight_bit_width,
@@ -300,6 +330,7 @@ class MobileNet(nn.Module):
         fc_config_list = hls_config_string_fc(
             self.output,
             name_prefix.upper(),
+            in_ch_pruning_mask=in_ch_pruning_mask,
             simd=self.simd_list[export_index],
             pe=self.pe_list[export_index],
             weight_bit_width=self.fc_weight_bit_width,
