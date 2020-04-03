@@ -284,11 +284,14 @@ class MobileNet(nn.Module):
         name_prefix = 'fc'
         fc_weight = hls_weight_string_fc(
             self.output,
+            simd=self.simd_list[export_index],
+            pe=self.pe_list[export_index],
             weight_bit_width=self.fc_weight_bit_width,
             hls_var_name='{}_weight'.format(name_prefix.lower()))
         weight_list.append(fc_weight)
         fc_bias = hls_bias_string_fc(
             self.fc_int_bias,
+            pe=self.pe_list[export_index],
             bias_bit_width=self.fc_bias_bit_width,
             output_bit_width=self.fc_output_bit_width,
             hls_var_name='{}_bias'.format(name_prefix.lower()))
@@ -297,6 +300,8 @@ class MobileNet(nn.Module):
         fc_config_list = hls_config_string_fc(
             self.output,
             name_prefix.upper(),
+            simd=self.simd_list[export_index],
+            pe=self.pe_list[export_index],
             weight_bit_width=self.fc_weight_bit_width,
             output_bit_width=self.fc_output_bit_width)
         config_list.append(define('POST_SUM_WIDTH_AVG_POOL', self.avg_pool_post_sum_bit_width))
