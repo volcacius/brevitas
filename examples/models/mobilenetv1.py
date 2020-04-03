@@ -164,7 +164,7 @@ class ConvBlock(nn.Module):
         int_input = (name_prefix.lower() + '_int_input', self.int_input.detach().cpu().numpy())
         int_acc = (name_prefix.lower() + '_int_acc', self.int_acc.detach().cpu().numpy())
         # Return as a list of a single tuple
-        export_tuple = conv_weight, threshold, config_list, int_input, int_acc
+        export_tuple = (name_prefix, conv_weight), (name_prefix, threshold), config_list, int_input, int_acc
         return [export_tuple]
 
     def forward(self, x):
@@ -288,14 +288,14 @@ class MobileNet(nn.Module):
             pe=self.pe_list[export_index],
             weight_bit_width=self.fc_weight_bit_width,
             hls_var_name='{}_weight'.format(name_prefix.lower()))
-        weight_list.append(fc_weight)
+        weight_list.append((name_prefix, fc_weight))
         fc_bias = hls_bias_string_fc(
             self.fc_int_bias,
             pe=self.pe_list[export_index],
             bias_bit_width=self.fc_bias_bit_width,
             output_bit_width=self.fc_output_bit_width,
             hls_var_name='{}_bias'.format(name_prefix.lower()))
-        weight_list.append(fc_bias)
+        threshold_list.append((name_prefix, fc_bias))
         # Config
         fc_config_list = hls_config_string_fc(
             self.output,

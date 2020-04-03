@@ -2,6 +2,7 @@ import argparse
 import os
 import random
 import configparser
+import collections
 
 import numpy as np
 import torch
@@ -93,16 +94,17 @@ def validate(val_loader, model, args):
             if args.export:
                 exp_input = images[0].unsqueeze(0)
                 weight_list, threshold_list, config_list, int_input_list, int_acc_list = model.export(exp_input)
-                weight_output_path = os.path.join(args.output_dir, 'memdata.h')
-                config_output_path = os.path.join(args.output_dir, 'config.h')
-                with open(weight_output_path, 'w') as f:
-                    for weight_set in weight_list:
-                        f.write(weight_set)
-                        f.write('\n')
-                    for threshold_set in threshold_list:
-                        f.write(threshold_set)
-                        f.write('\n')
-                with open(config_output_path, 'w') as f:
+                exp_dicts = [dict(weight_list), dict(threshold_list)]
+                output_dict = collections.defaultdict(list)
+                for d in exp_dicts:
+                    for k, v in d.items():
+                        output_dict[k].append(v)
+                for name_prefix, var_list in output_dict.items():
+                    with open(os.path.join(args.output_dir, '{}.h'.format(name_prefix)), 'w') as f:
+                        for var in var_list:
+                            f.write(var)
+                            f.write('\n')
+                with open(os.path.join(args.output_dir, 'config.h'), 'w') as f:
                     for config_line in config_list:
                         f.write(config_line)
                 for array_tuple in int_input_list:
