@@ -290,6 +290,7 @@ def hls_threshold_matrix(
         acc_bit_width,
         acc_scale_factor,
         acc_bias_factor,
+        enable_pruning,
         out_ch_pruning_mask=None):
     int_input_range = torch.arange(
         start=- 2 ** (acc_bit_width - 1),
@@ -380,7 +381,10 @@ def hls_threshold_matrix(
     new_out_ch_pruning_mask = np.array(new_out_ch_pruning_mask)
     if out_ch_pruning_mask is not None:
         new_out_ch_pruning_mask = np.logical_and(new_out_ch_pruning_mask, out_ch_pruning_mask)
-    threshold_matrix = threshold_matrix[new_out_ch_pruning_mask]  # select non pruned channels
+    if enable_pruning:
+        threshold_matrix = threshold_matrix[new_out_ch_pruning_mask]  # select non pruned channels
+    else:
+        new_out_ch_pruning_mask = None
     threshold_matrix = threshold_matrix.astype('object')
     return threshold_matrix, new_out_ch_pruning_mask
 
@@ -429,6 +433,7 @@ def hls_threshold_string(
         acc_bit_width,
         acc_scale_factor,
         acc_bias_factor,
+        enable_pruning,
         out_ch_pruning_mask=None,
         pe=None,
         starting_value=0,
@@ -439,6 +444,7 @@ def hls_threshold_string(
         acc_bit_width=acc_bit_width,
         acc_scale_factor=acc_scale_factor,
         acc_bias_factor=acc_bias_factor,
+        enable_pruning=enable_pruning,
         out_ch_pruning_mask=out_ch_pruning_mask)
     matrix_height = threshold_matrix.shape[0]
     num_thresholds = threshold_matrix.shape[1]

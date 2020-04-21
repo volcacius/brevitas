@@ -42,6 +42,7 @@ from .export_utils import *
 FIRST_LAYER_BIT_WIDTH = 8
 EXPORT = True
 NUM_LAYERS = 28
+STOP_PRUNING = 'layer0_block0_pw'
 
 class DwsConvBlock(nn.Module):
     def __init__(self,
@@ -67,11 +68,23 @@ class DwsConvBlock(nn.Module):
                                  act_bit_width=bit_width,
                                  activation_scaling_per_channel=pw_activation_scaling_per_channel)
 
-    def export(self, name_prefix, simd_dw, simd_pw, pe_dw, pe_pw, in_ch_pruning_mask):
+    def export(self, name_prefix, simd_dw, simd_pw, pe_dw, pe_pw, in_ch_pruning_mask, enable_out_ch_pruning):
         export_list = []
-        export_tuple, out_ch_pruning_mask = self.dw_conv.export(name_prefix + '_dw', simd_dw, pe_dw, in_ch_pruning_mask=in_ch_pruning_mask)
+        export_tuple, out_ch_pruning_mask = self.dw_conv.export(
+            name_prefix + '_dw',
+            simd_dw,
+            pe_dw,
+            in_ch_pruning_mask=in_ch_pruning_mask,
+            enable_out_ch_pruning=enable_out_ch_pruning)
         export_list.extend(export_tuple)
-        export_tuple, out_ch_pruning_mask = self.pw_conv.export(name_prefix + '_pw', simd_pw, pe_pw, in_ch_pruning_mask=out_ch_pruning_mask)
+        if name_prefix + '_pw' == STOP_PRUNING:
+            enable_out_ch_pruning = False
+        export_tuple, out_ch_pruning_mask = self.pw_conv.export(
+            name_prefix + '_pw',
+            simd_pw,
+            pe_pw,
+            in_ch_pruning_mask=out_ch_pruning_mask,
+            enable_out_ch_pruning=enable_out_ch_pruning)
         export_list.extend(export_tuple)
         return export_list, out_ch_pruning_mask
 
@@ -119,7 +132,7 @@ class ConvBlock(nn.Module):
         self.output_bit_width = None
         self.preprocessing_bias = None
 
-    def export(self, name_prefix, simd, pe, in_ch_pruning_mask):
+    def export(self, name_prefix, simd, pe, in_ch_pruning_mask, enable_out_ch_pruning):
         bias_factor_init = 0.0
         if self.conv.bias:
             bias_factor_init += self.conv.bias
@@ -134,7 +147,9 @@ class ConvBlock(nn.Module):
             acc_scale_factor = acc_scale_factor / 255.0
 
         # Out channel pruning mask, start with the one based on weights only
-        out_ch_pruning_mask = weight_matrix_conv_pruning_mask(self.conv)
+        out_ch_pruning_mask = None
+        if enable_out_ch_pruning:
+            out_ch_pruning_mask = weight_matrix_conv_pruning_mask(self.conv)
 
         # Threshold
         # Update out channel pruning mask with the one from thresholds too
@@ -146,7 +161,8 @@ class ConvBlock(nn.Module):
             acc_bias_factor=acc_bias_factor,
             output_bit_width=self.output_bit_width,
             out_ch_pruning_mask=out_ch_pruning_mask,
-            pe=pe)
+            pe=pe,
+            enable_pruning=enable_out_ch_pruning)
         # Weight
         weight_bit_width_impl = self.conv.weight_quant.tensor_quant.msb_clamp_bit_width_impl
         weight_bit_width = weight_bit_width_impl(getattr(self.conv.weight_quant, ZERO_HW_SENTINEL_NAME))
@@ -279,19 +295,26 @@ class MobileNet(nn.Module):
             self.forward(input_sample)
         export_list = []
         in_ch_pruning_mask = None
+        enable_out_ch_pruning = True
+        name_prefix = 'conv0'
+        if name_prefix == STOP_PRUNING:
+            enable_out_ch_pruning = False
         export_tuple, out_ch_pruning_mask = self.features[0].export(
             in_ch_pruning_mask=in_ch_pruning_mask,
-            name_prefix='conv0',
+            name_prefix=name_prefix,
             simd=self.simd_list[0],
-            pe=self.pe_list[0])
+            pe=self.pe_list[0],
+            enable_out_ch_pruning=enable_out_ch_pruning)
         export_list.extend(export_tuple)
         export_index = 1
+        in_ch_pruning_mask = out_ch_pruning_mask
         for i, stage in enumerate(self.features[1:]):
             for j, block in enumerate(stage):
                 name_prefix = 'layer{}_block{}'.format(i, j)
                 export_tuple, out_ch_pruning_mask = block.export(
                     name_prefix=name_prefix,
                     in_ch_pruning_mask=in_ch_pruning_mask,
+                    enable_out_ch_pruning=enable_out_ch_pruning,
                     simd_dw=self.simd_list[export_index],
                     simd_pw=self.simd_list[export_index + 1],
                     pe_dw=self.pe_list[export_index],
@@ -299,6 +322,10 @@ class MobileNet(nn.Module):
                 export_list.extend(export_tuple)
                 export_index += 2
                 in_ch_pruning_mask = out_ch_pruning_mask
+                if name_prefix in STOP_PRUNING:
+                    enable_out_ch_pruning = False
+                if not enable_out_ch_pruning:
+                    in_ch_pruning_mask = None
         export_list_list = [list(i) for i in zip(*export_list)]
         weight_list, threshold_list, config_list, int_input_list, int_acc_list = export_list_list
         avg_pool_int_input = self.avg_pool_int_input.detach().cpu().numpy()
