@@ -45,6 +45,7 @@ from torch.nn import Module
 from brevitas.core.bit_width import BitWidthImplType
 from brevitas.core.quant import QuantType
 from brevitas.proxy.runtime_quant import ClampQuantProxy, TruncQuantProxy
+from brevitas.core.restrict_val import FloatToIntImplType
 from .quant_layer import QuantLayer
 
 
@@ -107,6 +108,7 @@ class TruncQuantAccumulator(QuantAccumulator):
                  max_overall_bit_width: int = 32,
                  quant_type: QuantType = QuantType.INT,
                  lsb_trunc_bit_width_impl_type: BitWidthImplType = BitWidthImplType.CONST,
+                 float_to_int_impl_type: FloatToIntImplType = FloatToIntImplType.FLOOR,
                  trunc_at_least_init_val=False,
                  explicit_rescaling=False,
                  override_pretrained_bit_width: bool = False):
@@ -119,4 +121,5 @@ class TruncQuantAccumulator(QuantAccumulator):
                                                trunc_at_least_init_val=trunc_at_least_init_val,
                                                lsb_trunc_bit_width_impl_type=lsb_trunc_bit_width_impl_type,
                                                override_pretrained_bit_width=override_pretrained_bit_width,
-                                               explicit_rescaling=explicit_rescaling)
+                                               explicit_rescaling=explicit_rescaling,
+                                               float_to_int_impl_type=float_to_int_impl_type)

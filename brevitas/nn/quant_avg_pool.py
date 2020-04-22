@@ -51,6 +51,7 @@ from brevitas.function.ops import max_uint
 from brevitas.nn.quant_layer import QuantLayer
 from brevitas.proxy.runtime_quant import TruncQuantProxy
 from brevitas.quant_tensor import pack_quant_tensor
+from brevitas.core.restrict_val import FloatToIntImplType
 
 
 class QuantAvgPool2d(QuantLayer, AvgPool2d):
@@ -62,6 +63,7 @@ class QuantAvgPool2d(QuantLayer, AvgPool2d):
                  min_overall_bit_width: Optional[int] = 2,
                  max_overall_bit_width: Optional[int] = 32,
                  quant_type: QuantType = QuantType.FP,
+                 float_to_int_impl_type: FloatToIntImplType = FloatToIntImplType.FLOOR,
                  lsb_trunc_bit_width_impl_type = BitWidthImplType.CONST):
         QuantLayer.__init__(self,
                             compute_output_scale=True,
@@ -82,7 +84,8 @@ class QuantAvgPool2d(QuantLayer, AvgPool2d):
                                                  max_overall_bit_width=max_overall_bit_width,
                                                  lsb_trunc_bit_width_impl_type=lsb_trunc_bit_width_impl_type,
                                                  explicit_rescaling=explicit_rescaling,
-                                                 override_pretrained_bit_width=False)
+                                                 override_pretrained_bit_width=False,
+                                                 float_to_int_impl_type=float_to_int_impl_type)
 
     def forward(self, input):
         input_tensor, input_scale, input_bit_width = self.unpack_input(input)
