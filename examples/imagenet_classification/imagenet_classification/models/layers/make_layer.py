@@ -208,13 +208,15 @@ def make_quant_avg_pool(bit_width,
                         kernel_size,
                         stride,
                         signed,
-                        quant_type):
+                        quant_type,
+                        float_to_int_impl_type):
     return qnn.QuantAvgPool2d(kernel_size=kernel_size,
                               quant_type=quant_type,
                               signed=signed,
                               stride=stride,
                               min_overall_bit_width=bit_width,
-                              max_overall_bit_width=bit_width)
+                              max_overall_bit_width=bit_width,
+                              float_to_int_impl_type=float_to_int_impl_type)
 
 
 def make_hadamard_classifier(in_channels,

@@ -33,6 +33,7 @@ layers_defaults:
     WEIGHT_QUANT_TYPE: INT
   quant_avg_pool:
     QUANT_TYPE: INT
+    FLOAT_TO_INT_IMPL_TYPE: ROUND
   quant_relu:
     MAX_VAL: 6.0
   quant_hard_tanh:
