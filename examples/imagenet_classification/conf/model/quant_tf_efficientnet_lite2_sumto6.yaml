@@ -1,0 +1,72 @@
+# Source for full precision model
+# https://github.com/rwightman/gen-efficientnet-pytorch/blob/master/geffnet/gen_efficientnet.py
+
+model:
+  ARCH: quant_tf_efficientnet_lite2
+  PRETRAINED_MODEL: https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-weights/tf_efficientnet_lite2-dcccb7df.pth
+  FIRST_LAYER_WEIGHT_BIT_WIDTH: 4
+  LAST_LAYER_WEIGHT_BIT_WIDTH: 4
+  BASE_BIT_WIDTH: null
+  FIRST_LAYER_PADDING: 1
+  FIRST_LAYER_STRIDE: 2
+  AVG_POOL_KERNEL_SIZE: 9
+  MERGE_BN: null
+  DW_INP_BIT_WIDTH: 2
+  PW_INP_BIT_WIDTH: 3
+  DW_WEIGHT_BIT_WIDTH: 4
+  PW_WEIGHT_BIT_WIDTH: 3
+  AVG_POOL_INP_BIT_WIDTH: 4
+  AVG_POOL_OUTPUT_BIT_WIDTH: 4
+  DW_SCALING_PER_CHANNEL: True
+  SCALING_PER_CHANNEL: True
+  DW_SCALING_STATS_OP: MAX
+  SCALING_STATS_OP: MAX
+
+layers_defaults:
+  quant_act:
+    SCALING_MIN_VAL: null
+    QUANT_TYPE: INT
+    SCALING_IMPL_TYPE: PARAMETER
+    RESTRICT_SCALING_TYPE: LOG_FP
+  quant_weights:
+    WEIGHT_SCALING_MIN_VAL: null
+    WEIGHT_QUANT_TYPE: INT
+  quant_avg_pool:
+    QUANT_TYPE: INT
+  quant_relu:
+    MAX_VAL: 6.0
+  quant_hard_tanh:
+    THRESHOLD: 6.0
+  linear:
+    WEIGHT_SCALING_IMPL_TYPE: PARAMETER_FROM_STATS
+    WEIGHT_SCALING_STATS_OP: MAX
+    WEIGHT_SCALING_PER_OUTPUT_CHANNEL: False
+    ENABLE_BIAS_QUANT: True
+    WEIGHT_RESTRICT_SCALING_TYPE: LOG_FP
+    WEIGHT_NORM_IMPL_TYPE: MAX
+  conv:
+    WEIGHT_SCALING_PER_OUTPUT_CHANNEL: True
+    WEIGHT_SCALING_STATS_OP: MAX
+    WEIGHT_SCALING_IMPL_TYPE: PARAMETER_FROM_STATS
+    WEIGHT_RESTRICT_SCALING_TYPE: LOG_FP
+    WEIGHT_NORM_IMPL_TYPE: MAX
+
+dropout:
+  RATE: 0.3
+  SAMPLES: 1
+
+drop_connect:
+  RATE: 0.2
+
+preprocess:
+  CROP_SIZE: 260
+  RESIZE_RATIO: 0.875
+  RESIZE_IMPL_TYPE: BICUBIC
+  MEAN: # 127 / 255 = 0.4980392156862745
+    - 0.4980392156862745
+    - 0.4980392156862745
+    - 0.4980392156862745
+  STD: # 128 / 255 = 0.5019607843137255
+    - 0.5019607843137255
+    - 0.5019607843137255
+    - 0.5019607843137255
