@@ -127,7 +127,6 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             in_channels=num_features,
             out_channels=num_classes,
             bias=True,
-            enable_bias_quant=True,
             bit_width=last_layer_weight_bit_width)
 
         for n, m in self.named_modules():
