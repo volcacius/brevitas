@@ -1,5 +1,5 @@
 from .mobilenetv1 import *
-from .efficientnet_edge import *
+from .efficientnet import *
 from .proxylessnas import *
 from .vgg import *
 
