@@ -37,7 +37,7 @@ layers_defaults:
   quant_relu:
     MAX_VAL: 6.0
   quant_hard_tanh:
-    THRESHOLD: 6.0
+    THRESHOLD: 20.0
   linear:
     WEIGHT_SCALING_IMPL_TYPE: PARAMETER_FROM_STATS
     WEIGHT_SCALING_STATS_OP: MAX_L2
