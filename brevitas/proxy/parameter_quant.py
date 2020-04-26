@@ -59,7 +59,7 @@ from brevitas.core.scaling import ScalingImplType, ParameterStatsScaling, StatsI
 from brevitas.core.scaling import StandaloneScaling, SCALING_SCALAR_SHAPE, BufferScaling
 from brevitas.function.ops_ste import round_ste
 from brevitas.core.stats import StatsOp
-from brevitas.core.norm import MaxParameterListNorm, NormImplType, SameAsScalingNorm
+from brevitas.core.norm import ParameterListNorm, NormImplType, SameAsScalingNorm
 from brevitas import config
 from brevitas.config import docstrings
 
@@ -220,12 +220,12 @@ def _weight_quant_init_impl(bit_width: Optional[int],
             if norm_impl_type == NormImplType.MAX or \
                     norm_impl_type == NormImplType.MAX_AVE or \
                     norm_impl_type == NormImplType.MAX_L2:
-                norm_impl = MaxParameterListNorm(stats_op=StatsOp(norm_impl_type),
-                                                 tracked_parameter_list=tracked_parameter_list,
-                                                 input_view_shape_impl=scaling_stats_input_view_shape_impl,
-                                                 input_concat_dim=scaling_stats_input_concat_dim,
-                                                 reduce_dim=scaling_stats_reduce_dim,
-                                                 output_shape=scaling_shape)
+                norm_impl = ParameterListNorm(stats_op=StatsOp(norm_impl_type),
+                                              tracked_parameter_list=tracked_parameter_list,
+                                              input_view_shape_impl=scaling_stats_input_view_shape_impl,
+                                              input_concat_dim=scaling_stats_input_concat_dim,
+                                              reduce_dim=scaling_stats_reduce_dim,
+                                              output_shape=scaling_shape)
             elif norm_impl_type == NormImplType.SAME_AS_SCALING:
                 norm_impl = SameAsScalingNorm()
             else:

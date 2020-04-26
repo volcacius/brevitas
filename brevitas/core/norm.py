@@ -60,9 +60,10 @@ class NormImplType(AutoName):
     MAX = auto()
     MAX_AVE = auto()
     MAX_L2 = auto()
+    TOP10_AVE = auto()
 
 
-class MaxParameterListNorm(torch.jit.ScriptModule):
+class ParameterListNorm(torch.jit.ScriptModule):
     __constants__ = ['eps']
 
     def __init__(
@@ -73,11 +74,16 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
             reduce_dim: Optional[int],
             input_concat_dim: int,
             tracked_parameter_list: List[torch.nn.Parameter]):
-        super(MaxParameterListNorm, self).__init__()
-        assert stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2
+        super(ParameterListNorm, self).__init__()
+        assert stats_op == StatsOp.MAX or \
+               stats_op == StatsOp.MAX_AVE or \
+               stats_op == StatsOp.MAX_L2 or \
+               stats_op == StatsOp.TOP10_AVE
 
-        if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and output_shape != SCALING_SCALAR_SHAPE:
-            raise Exception("Norm with MAX_AVE/MAX_L2 stats can't be over output channels.")
+        if (stats_op == StatsOp.MAX_AVE or
+            stats_op == StatsOp.MAX_L2 or
+            stats_op == StatsOp.TOP10_AVE) and output_shape != SCALING_SCALAR_SHAPE:
+            raise Exception("Norm with multiop stats can't be over output channels.")
         self.eps = EPS
         self.parameter_list_stats = ParameterListStats(
             stats_op=stats_op,
@@ -95,7 +101,7 @@ class MaxParameterListNorm(torch.jit.ScriptModule):
         return norm
 
 
-class RuntimeMaxNorm(torch.jit.ScriptModule):
+class RuntimeNorm(torch.jit.ScriptModule):
     __constants__ = ['eps']
 
     def __init__(self,
@@ -107,11 +113,16 @@ class RuntimeMaxNorm(torch.jit.ScriptModule):
                  buffer_momentum: Optional[float],
                  restats: bool,
                  buffer_init: float) -> None:
-        super(RuntimeMaxNorm, self).__init__()
-        assert stats_op == StatsOp.MAX or stats_op == StatsOp.MAX_AVE or StatsOp.MAX_L2
+        super(RuntimeNorm, self).__init__()
+        assert stats_op == StatsOp.MAX or \
+               stats_op == StatsOp.MAX_AVE or \
+               stats_op == StatsOp.MAX_L2 or \
+               stats_op == StatsOp.TOP10_AVE
 
-        if (stats_op == StatsOp.MAX_AVE or stats_op == StatsOp.MAX_L2) and output_shape != SCALING_SCALAR_SHAPE:
-            raise Exception("Norm with MAX_AVE/MAX_L2 stats can't be over output channels.")
+        if (stats_op == StatsOp.MAX_AVE or
+            stats_op == StatsOp.MAX_L2 or
+            stats_op == StatsOp.TOP10_AVE) and output_shape != SCALING_SCALAR_SHAPE:
+            raise Exception("Norm with multiop stats can't be over output channels.")
         self.eps = EPS
         if restats:
             self.runtime_stats = RuntimeRestats(stats_op=stats_op,

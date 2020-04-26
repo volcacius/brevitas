@@ -74,6 +74,7 @@ class StatsOp(AutoName):
     MEAN_SIGMA_STD = auto()
     MEAN_LEARN_SIGMA_STD = auto()
     SAT_MAX_L2 = auto()
+    TOP10_AVE = auto()
 
 
 class _ViewParameterWrapper(torch.jit.ScriptModule):
@@ -191,6 +192,19 @@ class SatMaxL2(torch.jit.ScriptModule):
         return out
 
 
+class AbsTopKAve(torch.jit.ScriptModule):
+    __constants__ = ['k', 'reduce_dim']
+
+    def __init__(self, reduce_dim, k) -> None:
+        super(AbsTopKAve, self).__init__()
+        self.reduce_dim = reduce_dim
+        self.k = k
+
+    @torch.jit.script_method
+    def forward(self, x: torch.Tensor):
+        ch_top_k = torch.topk(torch.abs(x), k=self.k, largest=True, sorted=False, dim=self.reduce_dim)[0]
+        return torch.mean(ch_top_k)
+
 class AbsAve(torch.jit.ScriptModule):
     __constants__ = ['reduce_dim']
 
@@ -257,7 +271,8 @@ class Stats(torch.jit.ScriptModule):
                 len(stats_output_shape) < 2 and \
                 stats_op != StatsOp.MAX_AVE and \
                 stats_op != StatsOp.MAX_L2 and \
-                stats_op != StatsOp.SAT_MAX_L2:
+                stats_op != StatsOp.SAT_MAX_L2 and \
+                stats_op != StatsOp.TOP10_AVE:
             raise Exception("Defining a reduce dimension requires the output view shape to have at least 2 dims.")
         if  len(stats_output_shape) > 1 and stats_reduce_dim is None:
             raise Exception("Defining an output view shape with more than 1 dims assumes a not None reduce dim.")
@@ -276,6 +291,8 @@ class Stats(torch.jit.ScriptModule):
             self.stats_impl = AbsMaxL2(reduce_dim=stats_reduce_dim)
         elif stats_op == StatsOp.SAT_MAX_L2:
             self.stats_impl = SatMaxL2(reduce_dim=stats_reduce_dim)
+        elif stats_op == StatsOp.TOP10_AVE:
+            self.stats_impl = AbsTopKAve(k=10, reduce_dim=stats_reduce_dim)
         elif stats_op == StatsOp.MEAN_SIGMA_STD or stats_op == StatsOp.MEAN_LEARN_SIGMA_STD:
             const_sigma = None
             learned_sigma = None

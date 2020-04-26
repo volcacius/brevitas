@@ -54,7 +54,7 @@ from brevitas.core.restrict_val import RestrictValueType, RestrictValue, FloatTo
 from brevitas.core.scaling import RuntimeStatsScaling, SCALING_SCALAR_SHAPE, StatsInputViewShapeImpl
 from brevitas.core.scaling import ScalingImplType, StandaloneScaling, IntScaling
 from brevitas.core.stats import StatsOp
-from brevitas.core.norm import NormImplType, RuntimeMaxNorm, SameAsScalingNorm
+from brevitas.core.norm import NormImplType, RuntimeNorm, SameAsScalingNorm
 
 from .quant_proxy import QuantProxy
 
@@ -140,14 +140,20 @@ class ActivationQuantProxy(QuantProxy):
             elif scaling_impl_type == ScalingImplType.STATS or scaling_impl_type == ScalingImplType.AFFINE_STATS:
 
                 if scaling_per_channel and \
-                        not scaling_stats_op == StatsOp.MAX_AVE and not scaling_stats_op == StatsOp.MAX_L2:
+                        not scaling_stats_op == StatsOp.MAX_AVE and \
+                        not scaling_stats_op == StatsOp.MAX_L2 and \
+                        not scaling_stats_op == StatsOp.TOP10_AVE:
                     scaling_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                     scaling_stats_reduce_dim = 1
                 elif scaling_per_channel and \
-                        (scaling_stats_op == StatsOp.MAX_AVE or scaling_stats_op == StatsOp.MAX_L2):
+                        (scaling_stats_op == StatsOp.MAX_AVE or
+                         scaling_stats_op == StatsOp.MAX_L2 or
+                         scaling_stats_op == StatsOp.TOP10_AVE):
                     raise Exception("Can't do per channel scaling with MAX AVE/L2 statistics.")
                 elif not scaling_per_channel and \
-                        (scaling_stats_op == StatsOp.MAX_AVE or scaling_stats_op == StatsOp.MAX_L2):
+                        (scaling_stats_op == StatsOp.MAX_AVE or
+                         scaling_stats_op == StatsOp.MAX_L2 or
+                         scaling_stats_op == StatsOp.TOP10_AVE):
                     scaling_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                     scaling_stats_reduce_dim = 1
                 elif not scaling_per_channel:
@@ -207,15 +213,20 @@ class ActivationQuantProxy(QuantProxy):
 
                     if scaling_per_channel and \
                             not norm_impl_type == NormImplType.MAX_AVE and \
-                            not norm_impl_type == NormImplType.MAX_L2:
+                            not norm_impl_type == NormImplType.MAX_L2 and \
+                            not norm_impl_type == NormImplType.TOP10_AVE:
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                         norm_stats_reduce_dim = 1
                         norm_stats_permute_dims = scaling_stats_permute_dims
                     elif scaling_per_channel and \
-                            (norm_impl_type == NormImplType.MAX_AVE or norm_impl_type == NormImplType.MAX_L2):
-                        raise Exception("Can't do per channel norm with MAX AVE/L2 statistics.")
+                            (norm_impl_type == NormImplType.MAX_AVE or
+                             norm_impl_type == NormImplType.MAX_L2 or
+                             norm_impl_type == NormImplType.TOP10_AVE):
+                        raise Exception("Can't do per channel norm with multiop statistics.")
                     elif not scaling_per_channel and \
-                            (norm_impl_type == NormImplType.MAX_AVE or norm_impl_type == NormImplType.MAX_L2):
+                            (norm_impl_type == NormImplType.MAX_AVE or
+                             norm_impl_type == NormImplType.MAX_L2 or
+                             norm_impl_type == NormImplType.TOP10_AVE):
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                         norm_stats_reduce_dim = 1
                         norm_stats_permute_dims = scaling_stats_permute_dims
@@ -227,14 +238,14 @@ class ActivationQuantProxy(QuantProxy):
                         raise Exception("Norm strategy not valid.")
 
                     buffer_init = RescalingIntQuant.scaling_init_from_min_max(min_val, max_val).item()
-                    norm_impl = RuntimeMaxNorm(stats_op=StatsOp(norm_impl_type),
-                                               input_view_shape_impl=norm_stats_input_view_shape_impl,
-                                               reduce_dim=norm_stats_reduce_dim,
-                                               output_shape=scaling_shape,
-                                               buffer_momentum=scaling_stats_buffer_momentum,
-                                               buffer_init=buffer_init,
-                                               permute_dims=norm_stats_permute_dims,
-                                               restats=norm_restats)
+                    norm_impl = RuntimeNorm(stats_op=StatsOp(norm_impl_type),
+                                            input_view_shape_impl=norm_stats_input_view_shape_impl,
+                                            reduce_dim=norm_stats_reduce_dim,
+                                            output_shape=scaling_shape,
+                                            buffer_momentum=scaling_stats_buffer_momentum,
+                                            buffer_init=buffer_init,
+                                            permute_dims=norm_stats_permute_dims,
+                                            restats=norm_restats)
                 else:
                     norm_impl = SameAsScalingNorm()
 
