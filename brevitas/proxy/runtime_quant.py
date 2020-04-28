@@ -245,7 +245,8 @@ class ActivationQuantProxy(QuantProxy):
                                             buffer_momentum=scaling_stats_buffer_momentum,
                                             buffer_init=buffer_init,
                                             permute_dims=norm_stats_permute_dims,
-                                            restats=norm_restats)
+                                            restats=norm_restats,
+                                            sigma=scaling_stats_sigma)
                 else:
                     norm_impl = SameAsScalingNorm()
 

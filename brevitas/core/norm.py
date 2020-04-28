@@ -112,6 +112,7 @@ class RuntimeNorm(torch.jit.ScriptModule):
                  permute_dims: Tuple,
                  buffer_momentum: Optional[float],
                  restats: bool,
+                 sigma,
                  buffer_init: float) -> None:
         super(RuntimeNorm, self).__init__()
         assert stats_op == StatsOp.MAX or \
@@ -132,7 +133,7 @@ class RuntimeNorm(torch.jit.ScriptModule):
                                                 stats_buffer_momentum=buffer_momentum,
                                                 stats_buffer_init=buffer_init,
                                                 stats_permute_dims=permute_dims,
-                                                sigma=None)
+                                                sigma=sigma)
         else:
             self.runtime_stats = RuntimeStats(stats_op=stats_op,
                                               stats_output_shape=output_shape,
@@ -141,7 +142,7 @@ class RuntimeNorm(torch.jit.ScriptModule):
                                               stats_buffer_momentum=buffer_momentum,
                                               stats_buffer_init=buffer_init,
                                               stats_permute_dims=permute_dims,
-                                              sigma=None)
+                                              sigma=sigma)
 
     @torch.jit.script_method
     def forward(self, x: torch.Tensor, s: torch.Tensor):
