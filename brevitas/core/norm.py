@@ -60,7 +60,7 @@ class NormImplType(AutoName):
     MAX = auto()
     MAX_AVE = auto()
     MAX_L2 = auto()
-    TOP10_AVE = auto()
+    OUTLIERS_AVE = auto()
 
 
 class ParameterListNorm(torch.jit.ScriptModule):
@@ -78,11 +78,11 @@ class ParameterListNorm(torch.jit.ScriptModule):
         assert stats_op == StatsOp.MAX or \
                stats_op == StatsOp.MAX_AVE or \
                stats_op == StatsOp.MAX_L2 or \
-               stats_op == StatsOp.TOP10_AVE
+               stats_op == StatsOp.OUTLIERS_AVE
 
         if (stats_op == StatsOp.MAX_AVE or
             stats_op == StatsOp.MAX_L2 or
-            stats_op == StatsOp.TOP10_AVE) and output_shape != SCALING_SCALAR_SHAPE:
+            stats_op == StatsOp.OUTLIERS_AVE) and output_shape != SCALING_SCALAR_SHAPE:
             raise Exception("Norm with multiop stats can't be over output channels.")
         self.eps = EPS
         self.parameter_list_stats = ParameterListStats(
@@ -117,11 +117,11 @@ class RuntimeNorm(torch.jit.ScriptModule):
         assert stats_op == StatsOp.MAX or \
                stats_op == StatsOp.MAX_AVE or \
                stats_op == StatsOp.MAX_L2 or \
-               stats_op == StatsOp.TOP10_AVE
+               stats_op == StatsOp.OUTLIERS_AVE
 
         if (stats_op == StatsOp.MAX_AVE or
             stats_op == StatsOp.MAX_L2 or
-            stats_op == StatsOp.TOP10_AVE) and output_shape != SCALING_SCALAR_SHAPE:
+            stats_op == StatsOp.OUTLIERS_AVE) and output_shape != SCALING_SCALAR_SHAPE:
             raise Exception("Norm with multiop stats can't be over output channels.")
         self.eps = EPS
         if restats:

@@ -142,18 +142,18 @@ class ActivationQuantProxy(QuantProxy):
                 if scaling_per_channel and \
                         not scaling_stats_op == StatsOp.MAX_AVE and \
                         not scaling_stats_op == StatsOp.MAX_L2 and \
-                        not scaling_stats_op == StatsOp.TOP10_AVE:
+                        not scaling_stats_op == StatsOp.OUTLIERS_AVE:
                     scaling_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                     scaling_stats_reduce_dim = 1
                 elif scaling_per_channel and \
                         (scaling_stats_op == StatsOp.MAX_AVE or
                          scaling_stats_op == StatsOp.MAX_L2 or
-                         scaling_stats_op == StatsOp.TOP10_AVE):
+                         scaling_stats_op == StatsOp.OUTLIERS_AVE):
                     raise Exception("Can't do per channel scaling with MAX AVE/L2 statistics.")
                 elif not scaling_per_channel and \
                         (scaling_stats_op == StatsOp.MAX_AVE or
                          scaling_stats_op == StatsOp.MAX_L2 or
-                         scaling_stats_op == StatsOp.TOP10_AVE):
+                         scaling_stats_op == StatsOp.OUTLIERS_AVE):
                     scaling_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                     scaling_stats_reduce_dim = 1
                 elif not scaling_per_channel:
@@ -214,19 +214,19 @@ class ActivationQuantProxy(QuantProxy):
                     if scaling_per_channel and \
                             not norm_impl_type == NormImplType.MAX_AVE and \
                             not norm_impl_type == NormImplType.MAX_L2 and \
-                            not norm_impl_type == NormImplType.TOP10_AVE:
+                            not norm_impl_type == NormImplType.OUTLIERS_AVE:
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                         norm_stats_reduce_dim = 1
                         norm_stats_permute_dims = scaling_stats_permute_dims
                     elif scaling_per_channel and \
                             (norm_impl_type == NormImplType.MAX_AVE or
                              norm_impl_type == NormImplType.MAX_L2 or
-                             norm_impl_type == NormImplType.TOP10_AVE):
+                             norm_impl_type == NormImplType.OUTLIERS_AVE):
                         raise Exception("Can't do per channel norm with multiop statistics.")
                     elif not scaling_per_channel and \
                             (norm_impl_type == NormImplType.MAX_AVE or
                              norm_impl_type == NormImplType.MAX_L2 or
-                             norm_impl_type == NormImplType.TOP10_AVE):
+                             norm_impl_type == NormImplType.OUTLIERS_AVE):
                         norm_stats_input_view_shape_impl = StatsInputViewShapeImpl.OVER_OUTPUT_CHANNELS
                         norm_stats_reduce_dim = 1
                         norm_stats_permute_dims = scaling_stats_permute_dims
