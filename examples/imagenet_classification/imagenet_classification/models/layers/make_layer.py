@@ -67,13 +67,14 @@ class MeanOnlyBatchNorm2d(torch.jit.ScriptModule):
 
 
 class BatchTop10AveNorm2d(torch.jit.ScriptModule):
-    __constants__ = ['momentum']
+    __constants__ = ['momentum', 'first']
 
     def __init__(self, features, momentum=0.1):
         super(BatchTop10AveNorm2d, self).__init__()
         self.momentum = momentum
         self.weight = nn.Parameter(torch.empty(features).fill_(1.0))
         self.register_buffer('running_top10_ave', torch.empty(features).fill_(0.0))
+        self.first = True
 
     @torch.jit.script_method
     def forward(self, input_):
@@ -81,7 +82,11 @@ class BatchTop10AveNorm2d(torch.jit.ScriptModule):
         permuted_input_ = input_.permute(1, 0, 2, 3).contiguous().view(channels, -1)
         if self.training:
             top10_ave = permuted_input_.topk(k=10, dim=1, sorted=False, largest=True)[0].mean(dim=1)
-            self.running_top10_ave = (1 - self.momentum) * self.running_top10_ave + self.momentum * (top10_ave.detach())
+            if self.first:
+                self.running_top10_ave = top10_ave.detach()
+                self.first = False
+            else:
+                self.running_top10_ave = (1 - self.momentum) * self.running_top10_ave + self.momentum * (top10_ave.detach())
             output = (input_ / top10_ave.view(1, -1, 1, 1)) * self.weight.view(1, -1, 1, 1) * self.running_top10_ave.view(1, -1, 1, 1)
         else:
             output = input_ * self.weight.view(1, -1, 1, 1)
