@@ -3,6 +3,7 @@ from functools import partial
 import torch
 import brevitas.nn as qnn
 from brevitas.core.quant import QuantType
+import brevitas.config as config
 from torch import nn
 
 from ...utils import lowercase_keys
@@ -63,6 +64,39 @@ class MeanOnlyBatchNorm2d(torch.jit.ScriptModule):
         else:
             output = (input_ - self.running_mean.view(1, -1, 1, 1)) + self.bias.view(1, -1, 1, 1)
         return output
+
+
+class BatchTop10AveNorm2d(torch.jit.ScriptModule):
+    __constants__ = ['momentum']
+
+    def __init__(self, features, momentum=0.1):
+        super(BatchTop10AveNorm2d, self).__init__()
+        self.momentum = momentum
+        self.weight = nn.Parameter(torch.empty(features).fill_(1.0))
+        self.register_buffer('running_top10_ave', torch.empty(features).fill_(0.0))
+
+    @torch.jit.script_method
+    def forward(self, input_):
+        batchsize, channels, height, width = input_.size()
+        permuted_input_ = input_.permute(1, 0, 2, 3).contiguous().view(channels, -1)
+        if self.training:
+            top10_ave = permuted_input_.topk(k=10, dim=1, sorted=False, largest=True).mean(dim=1)
+            self.running_top10_ave = (1 - self.momentum) * self.running_running_top10_ave + self.momentum * (top10_ave.detach())
+            output = (input_ / top10_ave.view(1, -1, 1, 1)) * self.weight.view(1, -1, 1, 1) * self.running_top10_ave.view(1, -1, 1, 1)
+        else:
+            output = input_ * self.weight.view(1, -1, 1, 1)
+        return output
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        weight_key = prefix + 'weight'
+        running_top10_ave_key = prefix + 'running_top10_ave'
+        super(BatchTop10AveNorm2d, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs)
+        if config.IGNORE_MISSING_KEYS and weight_key in missing_keys:
+            missing_keys.remove(weight_key)
+        if config.IGNORE_MISSING_KEYS and running_top10_ave_key in missing_keys:
+            missing_keys.remove(running_top10_ave_key)
 
 
 def make_bn(merge_bn, features, eps, momentum):

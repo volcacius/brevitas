@@ -22,7 +22,7 @@ from torch import nn
 from brevitas.nn.quant_conv import PaddingType
 from . import layers
 from .layers.common import multisample_dropout_classify, residual_add_drop_connect, MergeBnMixin
-
+from .layers.make_layer import BatchTop10AveNorm2d
 
 class GenericEfficientNet(MergeBnMixin, nn.Module):
 
@@ -80,6 +80,7 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             weight_scaling_stats_op=scaling_stats_op,
             groups=1)
         self.bn1 = nn.Identity() if merge_bn else nn.BatchNorm2d(stem_size, eps=bn_eps)
+        self.top10ave1 = BatchTop10AveNorm2d(stem_size)
         self.act1 = layers.with_defaults.make_quant_relu(bit_width=first_act_bit_width)
         in_chans = stem_size
 
@@ -115,6 +116,7 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
             weight_scaling_stats_op=scaling_stats_op,
             groups=1)
         self.bn2 = nn.Identity() if merge_bn else nn.BatchNorm2d(num_features, eps=bn_eps)
+        self.top10ave2 = BatchTop10AveNorm2d(num_features)
         self.act2 = layers.with_defaults.make_quant_relu(
             bit_width=avg_pool_inp_bit_width,
             return_quant_tensor=True)
@@ -137,10 +139,12 @@ class GenericEfficientNet(MergeBnMixin, nn.Module):
 
     def features(self, x):
         x = self.conv_stem(x)
+        x = self.top10ave1(x)
         x = self.bn1(x)
         x = self.act1(x)
         x = self.blocks(x)
         x = self.conv_head(x)
+        x = self.top10ave2(x)
         x = self.bn2(x)
         x = self.act2(x)
         return x
@@ -372,6 +376,7 @@ class EdgeResidual(MergeBnMixin, nn.Module):
             groups=1,
             stride=1)
         self.bn1 = nn.Identity() if merge_bn else nn.BatchNorm2d(mid_chs, eps=bn_eps)
+        self.top10ave1 = BatchTop10AveNorm2d(mid_chs)
         self.act1 = layers.with_defaults.make_quant_relu(bit_width=bit_width)
 
         # Point-wise linear projection
@@ -387,6 +392,7 @@ class EdgeResidual(MergeBnMixin, nn.Module):
             groups=1,
             bias=merge_bn)
         self.bn2 = nn.Identity() if merge_bn else nn.BatchNorm2d(out_chs, eps=bn_eps)
+        self.top10ave2 = BatchTop10AveNorm2d(out_chs)
 
     def conv_bn_tuples(self):
         return [(self.conv_exp, 'conv_exp', 'bn1'),
@@ -397,11 +403,13 @@ class EdgeResidual(MergeBnMixin, nn.Module):
 
         # Expansion convolution
         x = self.conv_exp(x)
+        x = self.top10ave1(x)
         x = self.bn1(x)
         x = self.act1(x)
 
         # Point-wise linear projection
         x = self.conv_pwl(x)
+        x = self.top10ave2(x)
         x = self.bn2(x)
         x = self.shared_hard_tanh(x)
         if self.has_residual:
@@ -451,6 +459,7 @@ class DepthwiseSeparableConv(MergeBnMixin, nn.Module):
             weight_scaling_per_output_channel=dw_scaling_per_channel,
             weight_scaling_stats_op=dw_scaling_stats_op)
         self.bn1 = nn.Identity() if merge_bn else nn.BatchNorm2d(in_chs, eps=bn_eps)
+        self.top10ave1 = BatchTop10AveNorm2d(in_chs)
         self.act1 = layers.with_defaults.make_quant_relu(
             bit_width=pw_inp_bit_width)  # is input to pw conv
         self.conv_pw = layers.with_defaults.make_quant_conv2d(
@@ -465,6 +474,7 @@ class DepthwiseSeparableConv(MergeBnMixin, nn.Module):
             groups=1,
             stride=1)
         self.bn2 = nn.Identity() if merge_bn else nn.BatchNorm2d(out_chs, eps=bn_eps)
+        self.top10ave2 = BatchTop10AveNorm2d(out_chs)
 
     def conv_bn_tuples(self):
         return [(self.conv_pw, 'conv_dw', 'bn1'),
@@ -474,10 +484,12 @@ class DepthwiseSeparableConv(MergeBnMixin, nn.Module):
         residual = x
 
         x = self.conv_dw(x)
+        x = self.top10ave1(x)
         x = self.bn1(x)
         x = self.act1(x)
 
         x = self.conv_pw(x)
+        x = self.top10ave2(x)
         x = self.bn2(x)
         x = self.shared_hard_tanh(x)
 
@@ -533,6 +545,7 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             stride=1,
             groups=1)
         self.bn1 = nn.Identity() if merge_bn else nn.BatchNorm2d(mid_chs, eps=bn_eps)
+        self.top10ave1 = BatchTop10AveNorm2d(mid_chs)
         self.act1 = layers.with_defaults.make_quant_relu(
             bit_width=dw_inp_bit_width,  # is input to dw conv
             scaling_per_channel=dw_scaling_per_channel,
@@ -551,6 +564,7 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             weight_scaling_per_output_channel=dw_scaling_per_channel,
             weight_scaling_stats_op=dw_scaling_stats_op)
         self.bn2 = nn.Identity() if merge_bn else nn.BatchNorm2d(mid_chs, eps=bn_eps)
+        self.top10ave2 = BatchTop10AveNorm2d(mid_chs)
         self.act2 = layers.with_defaults.make_quant_relu(
             bit_width=pw_inp_bit_width)
 
@@ -566,6 +580,7 @@ class InvertedResidual(MergeBnMixin, nn.Module):
             weight_scaling_stats_op=pw_scaling_stats_op,
             groups=1,
             stride=1)
+        self.top10ave3 = BatchTop10AveNorm2d(out_chs)
         self.bn3 = nn.Identity() if merge_bn else nn.BatchNorm2d(out_chs, eps=bn_eps)
 
     def conv_bn_tuples(self):
@@ -578,16 +593,19 @@ class InvertedResidual(MergeBnMixin, nn.Module):
 
         # Point-wise expansion
         x = self.conv_pw(x)
+        x = self.top10ave1(x)
         x = self.bn1(x)
         x = self.act1(x)
 
         # Depth-wise convolution
         x = self.conv_dw(x)
+        x = self.top10ave2(x)
         x = self.bn2(x)
         x = self.act2(x)
 
         # Point-wise linear projection
         x = self.conv_pwl(x)
+        x = self.top10ave3(x)
         x = self.bn3(x)
         x = self.shared_hard_tanh(x)
 
