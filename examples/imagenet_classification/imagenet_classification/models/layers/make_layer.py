@@ -81,7 +81,7 @@ class BatchTop10AveNorm2d(torch.jit.ScriptModule):
         permuted_input_ = input_.permute(1, 0, 2, 3).contiguous().view(channels, -1)
         if self.training:
             top10_ave = permuted_input_.topk(k=10, dim=1, sorted=False, largest=True)[0].mean(dim=1)
-            self.running_top10_ave = (1 - self.momentum) * self.running_running_top10_ave + self.momentum * (top10_ave.detach())
+            self.running_top10_ave = (1 - self.momentum) * self.running_top10_ave + self.momentum * (top10_ave.detach())
             output = (input_ / top10_ave.view(1, -1, 1, 1)) * self.weight.view(1, -1, 1, 1) * self.running_top10_ave.view(1, -1, 1, 1)
         else:
             output = input_ * self.weight.view(1, -1, 1, 1)
