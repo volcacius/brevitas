@@ -307,7 +307,13 @@ class ActivationQuantProxy(QuantProxy):
 
                 # Put scaling init in place in the dict for parameter
                 if self.scaling_impl_type == ScalingImplType.PARAMETER:
-                    state_dict[scaling_parameter_key] = scaling_init
+                    scaling_parameter = getattr(scaling_impl, scaling_parameter_key)
+                    if scaling_init.shape == scaling_init.shape:
+                        state_dict[scaling_parameter_key] = scaling_init
+                    elif scaling_init.shape == SCALING_SCALAR_SHAPE and scaling_parameter.shape != SCALING_SCALAR_SHAPE:
+                        state_dict[scaling_parameter_key] = torch.full(scaling_parameter.shape, scaling_init)
+                    else:
+                        raise Exception("Can't retrofit a tensor into a scalar")
 
             # Get rid of statistics after using them or in case there is already a parameter
             for k in list(state_dict.keys()):
