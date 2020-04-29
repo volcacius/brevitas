@@ -307,7 +307,7 @@ class ActivationQuantProxy(QuantProxy):
 
                 # Put scaling init in place in the dict for parameter
                 if self.scaling_impl_type == ScalingImplType.PARAMETER:
-                    scaling_parameter = getattr(scaling_impl, scaling_parameter_key)
+                    scaling_parameter = scaling_impl.learned_value
                     if scaling_init.shape == scaling_init.shape:
                         state_dict[scaling_parameter_key] = scaling_init
                     elif scaling_init.shape == SCALING_SCALAR_SHAPE and scaling_parameter.shape != SCALING_SCALAR_SHAPE:
