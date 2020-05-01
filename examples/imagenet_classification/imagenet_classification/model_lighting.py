@@ -97,7 +97,8 @@ class QuantImageNetClassification(LightningModule):
         self.model = models_dict[arch](self.hparams)
 
     def configure_ema(self):
-        self.ema = deepcopy(self.model)
+        arch = self.hparams.model.ARCH
+        self.ema = models_dict[arch](self.hparams)
         self.ema.eval()
         for p in self.ema.parameters():
             p.requires_grad_(False)
