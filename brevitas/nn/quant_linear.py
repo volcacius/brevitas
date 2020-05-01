@@ -205,7 +205,7 @@ class QuantLinear(QuantLayer, Linear):
             quant_weight, quant_weight_scale, quant_weight_bit_width = self.weight_quant(self.weight)
             quant_weight = self.weight_reg(quant_weight)
             self.quant_weight_buffer = quant_weight.detach()
-            self.quant_weight_scale_buffer = quant_weight_scale.detach()
+            self.quant_weight_scale_buffer = quant_weight_scale.detach().view(-1, 1)
             self.quant_weight_bit_width_buffer = quant_weight_bit_width.detach()
 
         if self.compute_output_bit_width:

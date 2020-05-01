@@ -239,7 +239,7 @@ class QuantConv2d(QuantLayer, Conv2d):
             quant_weight, quant_weight_scale, quant_weight_bit_width = self.weight_quant(self.weight)
             quant_weight = self.weight_reg(quant_weight)
             self.quant_weight_buffer = quant_weight.detach()
-            self.quant_weight_scale_buffer = quant_weight_scale.detach()
+            self.quant_weight_scale_buffer = quant_weight_scale.detach().view(self.per_output_channel_broadcastable_shape)
             self.quant_weight_bit_width_buffer = quant_weight_bit_width.detach()
 
         if self.compute_output_bit_width:
