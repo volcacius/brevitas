@@ -100,6 +100,8 @@ class QuantImageNetClassification(LightningModule):
         arch = self.hparams.model.ARCH
         self.ema = models_dict[arch](self.hparams)
         self.ema.eval()
+        self.ema_first_batch = True
+        self.ema_first_epoch = True
         for p in self.ema.parameters():
             p.requires_grad_(False)
         for name, mod in self.ema.named_modules():
@@ -169,7 +171,6 @@ class QuantImageNetClassification(LightningModule):
         checkpoint['state_dict'] = model_state_dict
         checkpoint['ema_state_dict'] = ema_state_dict
 
-
     def loss(self, output, target):
         if isinstance(output, tuple):  # supports multi-sample dropout
             loss = sum((self.__loss_fn(o, target) for o in output))
@@ -201,7 +202,7 @@ class QuantImageNetClassification(LightningModule):
         optimizer.zero_grad()
 
         #update EMA
-        self.update_ema()
+        self.update_ema_batch()
 
     def training_step(self, batch, batch_idx):
         images, target = batch
@@ -226,12 +227,28 @@ class QuantImageNetClassification(LightningModule):
             'log': log_dict})
         return output
 
-    def update_ema(self):
+    def update_ema_batch(self):
         with torch.no_grad():
             ema_state_dict = self.ema.state_dict()
             for k, new_value in self.model.state_dict().items():
                 ema_value = ema_state_dict[k].detach() # this is a pointer to the tensor in the state dict, not a copy
-                ema_value.copy_(ema_value * self.hparams.EMA_DECAY + (1.0 - self.hparams.EMA_DECAY) * new_value)
+                if self.ema_first_batch:
+                    ema_value.copy_(new_value)
+                    self.ema_first_batch = False
+                else:
+                    ema_value.copy_(ema_value * self.hparams.EMA_DECAY + (1.0 - self.hparams.EMA_DECAY) * new_value)
+
+    def update_ema_epoch(self):
+        with torch.no_grad():
+            ema_state_dict = self.ema.state_dict()
+            k_suffix = 'quant_weight_buffer'
+            for k, value in ema_state_dict.items():
+                if k_suffix in k:
+                    quant_weight_buffer = ema_state_dict[k]
+                    weight_k = k[:-len(k_suffix)] + 'weight'
+                    ema_state_dict[weight_k].copy_(quant_weight_buffer.detach())
+            if self.hparams.RELOAD_EMA_EPOCH:
+                self.model.load_state_dict(ema_state_dict)
 
     def on_epoch_start(self):
         # Reset loggers
@@ -244,6 +261,12 @@ class QuantImageNetClassification(LightningModule):
         self.val_loss_ema_meter.reset()
         self.val_top1_ema_meter.reset()
         self.val_top5_ema_meter.reset()
+        # Reload ema weights into model if enabled, after the first epoch
+        if self.ema_first_epoch:
+            self.ema_first_epoch = False
+        else:
+            self.update_ema_epoch()
+
 
     def validation_step(self, batch, batch_idx):
         images, target = batch
