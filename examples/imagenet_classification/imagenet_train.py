@@ -36,7 +36,7 @@ def main(hparams):
 
     # Init checkpoint callback
     ckpt_callback = BestModelCheckpoint(filepath=os.path.join(os.getcwd(), task_name + '.ckpt'),
-                                        monitor='val_top1',
+                                        monitor='val_top1_ema',
                                         mode='max')
 
     # A single GPU id has to be passed as a string, otherwise it will be interpreted as # of GPUs

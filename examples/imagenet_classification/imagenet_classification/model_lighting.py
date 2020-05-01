@@ -6,7 +6,7 @@ https://github.com/williamFalcon/pytorch-lightning/blob/master/pl_examples/full_
 import os
 import random
 from collections import OrderedDict
-from functools import partial
+from copy import deepcopy
 
 import numpy as np
 import pytorch_lightning as pl
@@ -67,6 +67,7 @@ class QuantImageNetClassification(LightningModule):
         self.configure_brevitas()
         self.configure_layers_defaults()
         self.configure_model()
+        self.configure_ema()
         self.configure_loss()
         self.load_pretrained_model()
         self.set_random_seed(hparams.SEED)
@@ -84,6 +85,9 @@ class QuantImageNetClassification(LightningModule):
         self.val_loss_meter = AverageMeter()
         self.val_top1_meter = AverageMeter()
         self.val_top5_meter = AverageMeter()
+        self.val_loss_ema_meter = AverageMeter()
+        self.val_top1_ema_meter = AverageMeter()
+        self.val_top5_ema_meter = AverageMeter()
 
     def configure_layers_defaults(self):
         layers.with_defaults = MakeLayerWithDefaults(self.hparams.layers_defaults)
@@ -91,6 +95,15 @@ class QuantImageNetClassification(LightningModule):
     def configure_model(self):
         arch = self.hparams.model.ARCH
         self.model = models_dict[arch](self.hparams)
+
+    def configure_ema(self):
+        self.ema = deepcopy(self.model)
+        self.ema.eval()
+        for p in self.ema.parameters():
+            p.requires_grad_(False)
+        for name, mod in self.model.named_modules():
+            if hasattr(mod, 'quant_buffers_eval'):
+                mod.quant_buffers_eval = True
 
     def configure_optimizers(self):
         no_wd_params, wd_params = filter_keys(self.named_parameters(), self.hparams.NO_WD)
@@ -135,16 +148,26 @@ class QuantImageNetClassification(LightningModule):
             return
         if pretrained_model is not None:
             self.model.load_state_dict(
-                state_dict_from_url_or_path((pretrained_model)), strict=True)
+                state_dict_from_url_or_path(pretrained_model, load_ema=self.hparams.LOAD_EMA),
+                strict=self.hparams.STRICT)
             logging.info('Loaded pretrained model at: {}'.format(pretrained_model))
 
     def on_save_checkpoint(self, checkpoint):
-        # Remove prefix 'model.' from the saved model
+        # Split model. from ema.
         state_dict = checkpoint['state_dict']
-        keys = state_dict.keys()
-        for k in list(keys):  # list takes a copy of the keys
+        model_state_dict = {}
+        ema_state_dict = {}
+        for k in state_dict.keys():
             if k.startswith('model.'):
-                state_dict[k[len('model.'):]] = state_dict.pop(k)
+                model_state_dict[k[len('model.'):]] = state_dict[k]
+            elif k.startswith('ema.'):
+                ema_state_dict[k[len('ema.'):]] = state_dict[k]
+            else:
+                model_state_dict[k] = state_dict[k]
+                ema_state_dict[k] = state_dict[k]
+        checkpoint['state_dict'] = model_state_dict
+        checkpoint['ema_state_dict'] = ema_state_dict
+
 
     def loss(self, output, target):
         if isinstance(output, tuple):  # supports multi-sample dropout
@@ -176,6 +199,9 @@ class QuantImageNetClassification(LightningModule):
         optimizer.step()
         optimizer.zero_grad()
 
+        #update EMA
+        self.update_ema()
+
     def training_step(self, batch, batch_idx):
         images, target = batch
         output = self.model(images)
@@ -199,15 +225,12 @@ class QuantImageNetClassification(LightningModule):
             'log': log_dict})
         return output
 
-    def weight_ema_update(self):
-        for name, mod in self.model.named_modules():
-            if isinstance(mod, (qnn.QuantConv2d, qnn.QuantLinear)):
-                new_weight, _, _ = mod.weight_quant(mod.weight.detach())
-                if hasattr(mod, 'ema_weight'):
-                    mod.ema_weight = mod.ema_weight * self.hparams.WEIGHT_EMA_COEFF \
-                                     + (1.0 - self.hparams.WEIGHT_EMA_COEFF) * new_weight.detach()
-                else:
-                    mod.ema_weight = new_weight.detach()
+    def update_ema(self):
+        with torch.no_grad():
+            ema_state_dict = self.ema.state_dict()
+            for k, new_value in self.model.state_dict().items():
+                ema_value = ema_state_dict[k].detach() # this is a pointer to the tensor in the state dict, not a copy
+                ema_value.copy_(ema_value * self.hparams.EMA_DECAY + (1.0 - self.hparams.EMA_DECAY) * new_value)
 
     def on_epoch_start(self):
         # Reset loggers
@@ -217,18 +240,28 @@ class QuantImageNetClassification(LightningModule):
         self.val_loss_meter.reset()
         self.val_top1_meter.reset()
         self.val_top5_meter.reset()
-        # Update EMA
-        self.weight_ema_update()
+        self.val_loss_ema_meter.reset()
+        self.val_top1_ema_meter.reset()
+        self.val_top5_ema_meter.reset()
 
     def validation_step(self, batch, batch_idx):
         images, target = batch
+
         output = self.model(images)
         val_loss, output = self.loss(output, target)
         val_top1, val_top5 = topk_accuracy(output, target, topk=(1, 5))
 
+        output_ema = self.ema(images)
+        val_loss_ema, output_ema = self.loss(output_ema, target)
+        val_top1_ema, val_top5_ema = topk_accuracy(output_ema, target, topk=(1, 5))
+
         self.val_loss_meter.update(val_loss.detach(), images.size(0))
         self.val_top1_meter.update(val_top1.detach(), images.size(0))
         self.val_top5_meter.update(val_top5.detach(), images.size(0))
+
+        self.val_loss_ema_meter.update(val_loss_ema.detach(), images.size(0))
+        self.val_top1_ema_meter.update(val_top1_ema.detach(), images.size(0))
+        self.val_top5_ema_meter.update(val_top5_ema.detach(), images.size(0))
 
         log_dict = {
             LOG_STAGE_LOG_KEY: LogStage.VAL_BATCH,
@@ -237,7 +270,10 @@ class QuantImageNetClassification(LightningModule):
             NUM_BATCHES_LOG_KEY: self.trainer.nb_val_batches,
             VAL_LOSS_METER: self.val_loss_meter,
             VAL_TOP1_METER: self.val_top1_meter,
-            VAL_TOP5_METER: self.val_top5_meter}
+            VAL_TOP5_METER: self.val_top5_meter,
+            VAL_LOSS_EMA_METER: self.val_loss_ema_meter,
+            VAL_TOP1_EMA_METER: self.val_top1_ema_meter,
+            VAL_TOP5_EMA_METER: self.val_top5_ema_meter}
         self.logger.log_metrics(log_dict)
         return val_loss
 
@@ -250,12 +286,17 @@ class QuantImageNetClassification(LightningModule):
             TRAIN_TOP5_METER: self.train_top5_meter,
             VAL_LOSS_METER: self.val_loss_meter,
             VAL_TOP1_METER: self.val_top1_meter,
-            VAL_TOP5_METER: self.val_top5_meter}
+            VAL_TOP5_METER: self.val_top5_meter,
+            VAL_LOSS_EMA_METER: self.val_loss_ema_meter,
+            VAL_TOP1_EMA_METER: self.val_top1_ema_meter,
+            VAL_TOP5_EMA_METER: self.val_top5_ema_meter}
 
         result = {
             'log': log_dict,
             'val_top1': log_dict[VAL_TOP1_METER].avg,
-            'val_loss': log_dict[VAL_LOSS_METER].avg}
+            'val_loss': log_dict[VAL_LOSS_METER].avg,
+            'val_top1_ema': log_dict[VAL_TOP1_EMA_METER].avg,
+            'val_loss_ema': log_dict[VAL_LOSS_EMA_METER].avg}
         return result
 
     def test_step(self, batch, batch_idx):

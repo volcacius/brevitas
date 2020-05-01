@@ -114,6 +114,7 @@ class QuantConv2d(QuantLayer, Conv2d):
                  weight_scaling_stats_sigma: float = 3.0,
                  weight_scaling_min_val: float = SCALING_MIN_VAL,
                  weight_override_pretrained_bit_width: bool = False,
+                 quant_buffers_eval: bool = False,
                  compute_output_scale: bool = False,
                  compute_output_bit_width: bool = False,
                  return_quant_tensor: bool = False) -> None:
@@ -139,6 +140,7 @@ class QuantConv2d(QuantLayer, Conv2d):
         self.padding_type = padding_type
         self.weight_reg = WeightReg()
         self.weight_scaling_stats_op = weight_scaling_stats_op
+        self.quant_buffers_eval = quant_buffers_eval
 
         if weight_quant_override is not None:
             self.weight_quant = weight_quant_override
@@ -186,6 +188,9 @@ class QuantConv2d(QuantLayer, Conv2d):
         self.bias_quant = BiasQuantProxy(quant_type=bias_quant_type,
                                          bit_width=bias_bit_width,
                                          narrow_range=bias_narrow_range)
+        self.register_buffer('quant_weight_buffer', self.weight.detach())
+        self.register_buffer('quant_weight_scale_buffer', self.quant_weight_scale.detach())
+        self.register_buffer('quant_weight_bit_width_buffer', torch.tensor(weight_bit_width))
 
     @property
     def per_output_channel_broadcastable_shape(self):
@@ -225,8 +230,17 @@ class QuantConv2d(QuantLayer, Conv2d):
         quant_bias_bit_width = None
 
         input, input_scale, input_bit_width = self.unpack_input(input)
-        quant_weight, quant_weight_scale, quant_weight_bit_width = self.weight_quant(self.weight)
-        quant_weight = self.weight_reg(quant_weight)
+
+        if not self.training and self.quant_buffers_eval:
+            quant_weight = self.quant_weight_buffer
+            quant_weight_scale = self.quant_weight_scale_buffer
+            quant_weight_bit_width = self.quant_weight_bit_width_buffer
+        else:
+            quant_weight, quant_weight_scale, quant_weight_bit_width = self.weight_quant(self.weight)
+            quant_weight = self.weight_reg(quant_weight)
+            self.quant_weight_buffer = quant_weight.detach()
+            self.quant_weight_scale_buffer = quant_weight_scale.detach()
+            self.quant_weight_bit_width_buffer = quant_weight_bit_width.detach()
 
         if self.compute_output_bit_width:
             assert input_bit_width is not None
