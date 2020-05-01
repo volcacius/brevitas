@@ -102,7 +102,7 @@ class QuantImageNetClassification(LightningModule):
         self.ema.eval()
         for p in self.ema.parameters():
             p.requires_grad_(False)
-        for name, mod in self.model.named_modules():
+        for name, mod in self.ema.named_modules():
             if hasattr(mod, 'quant_buffers_eval'):
                 mod.quant_buffers_eval = True
 
