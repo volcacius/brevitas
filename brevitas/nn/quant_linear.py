@@ -166,7 +166,7 @@ class QuantLinear(QuantLayer, Linear):
                                          narrow_range=bias_narrow_range,
                                          bit_width=bias_bit_width)
         self.register_buffer('quant_weight_buffer', torch.zeros_like(self.weight))
-        self.register_buffer('quant_weight_scale_buffer', torch.zeros_like(self.quant_weight_scale))
+        self.register_buffer('quant_weight_scale_buffer', torch.zeros(weight_scaling_shape))
         self.register_buffer('quant_weight_bit_width_buffer', torch.tensor(0.0))
 
     @property
@@ -205,7 +205,7 @@ class QuantLinear(QuantLayer, Linear):
             quant_weight, quant_weight_scale, quant_weight_bit_width = self.weight_quant(self.weight)
             quant_weight = self.weight_reg(quant_weight)
             self.quant_weight_buffer = quant_weight.detach()
-            self.quant_weight_scale_buffer = quant_weight_scale.detach().view(-1, 1)
+            self.quant_weight_scale_buffer = quant_weight_scale.detach().view(self.quant_weight_scale_buffer.shape)
             self.quant_weight_bit_width_buffer = quant_weight_bit_width.detach()
 
         if self.compute_output_bit_width:
