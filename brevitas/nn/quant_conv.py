@@ -190,7 +190,7 @@ class QuantConv2d(QuantLayer, Conv2d):
                                          narrow_range=bias_narrow_range)
         self.register_buffer('quant_weight_buffer', self.weight.detach())
         self.register_buffer('quant_weight_scale_buffer', self.quant_weight_scale.detach())
-        self.register_buffer('quant_weight_bit_width_buffer', torch.tensor(weight_bit_width))
+        self.register_buffer('quant_weight_bit_width_buffer', torch.tensor(float(weight_bit_width)))
 
     @property
     def per_output_channel_broadcastable_shape(self):
