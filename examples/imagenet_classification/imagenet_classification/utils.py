@@ -2,6 +2,7 @@ import os
 from urllib.parse import urlparse
 from enum import Enum
 
+from torch import nn
 import torch
 
 IGNORE_VALUE = -1
@@ -92,3 +93,5 @@ class MissingOptionalDependency:
 
     def __call__(self, *args, **kwargs):
         raise self.e
+
+

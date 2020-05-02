@@ -143,6 +143,12 @@ class QuantImageNetClassification(LightningModule):
         np.random.seed(seed)
         random.seed(seed)
 
+    def update_quant_buffers_from_weight_quant(self):
+        for m in [self.model, self.ema]:
+            for k, mod in m.named_modules():
+                if hasattr(mod, 'update_quant_buffers_from_weight_quant'):
+                    mod.update_quant_buffers_from_weight_quant()
+
     def load_pretrained_model(self):
         try:
             pretrained_model = self.hparams.model.PRETRAINED_MODEL
@@ -152,6 +158,7 @@ class QuantImageNetClassification(LightningModule):
             state_dict = state_dict_from_url_or_path(pretrained_model, load_from_ema=self.hparams.LOAD_FROM_EMA)
             self.model.load_state_dict(state_dict, strict=self.hparams.STRICT)
             self.ema.load_state_dict(state_dict, strict=self.hparams.STRICT)
+            self.update_quant_buffers_from_weight_quant()
             logging.info('Loaded pretrained model at: {}'.format(pretrained_model))
 
     def on_save_checkpoint(self, checkpoint):

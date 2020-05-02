@@ -168,7 +168,7 @@ class QuantLinear(QuantLayer, Linear):
         self.register_buffer('quant_weight_buffer', torch.zeros_like(self.weight))
         self.register_buffer('quant_weight_scale_buffer', torch.zeros(weight_scaling_shape))
         self.register_buffer('quant_weight_bit_width_buffer', torch.tensor(0.0))
-        self.update_quant_buffers(*self.weight_quant(self.weight))
+        self.update_quant_buffers_from_weight_quant()
 
     @property
     def int_weight(self):
@@ -191,15 +191,7 @@ class QuantLinear(QuantLayer, Linear):
         _, scale, _ = self.weight_quant.tensor_quant(self.weight, zero_hw_sentinel)
         return scale
 
-    def update_quant_buffers(self, quant_weight, quant_weight_scale, quant_weight_bit_width):
-        self.quant_weight_buffer = quant_weight.detach()
-        self.quant_weight_scale_buffer = quant_weight_scale.detach().view(self.quant_weight_scale_buffer.shape)
-        self.quant_weight_bit_width_buffer = quant_weight_bit_width.detach()
-
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        super(QuantLinear, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
-                                                       missing_keys, unexpected_keys, error_msgs)
+    def update_quant_buffers_from_weight_quant(self):
         self.update_quant_buffers(*self.weight_quant(self.weight))
 
     def update_quant_buffers(self, quant_weight, quant_weight_scale, quant_weight_bit_width):
