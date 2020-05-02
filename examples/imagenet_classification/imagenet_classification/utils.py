@@ -49,12 +49,12 @@ def lowercase_keys(d):
     return {k.lower(): v for k, v in d.items()}
 
 
-def state_dict_from_url_or_path(pretrained_model, load_ema):
+def state_dict_from_url_or_path(pretrained_model, load_from_ema):
     if os.path.exists(pretrained_model):
         if pretrained_model.lower().endswith('.pth'):
             state_dict = torch.load(pretrained_model, map_location='cpu')
         else:
-            d = 'ema_state_dict' if load_ema else 'state_dict'
+            d = 'ema_state_dict' if load_from_ema else 'state_dict'
             state_dict = torch.load(pretrained_model, map_location='cpu')[d]
     elif urlparse(pretrained_model).netloc:  # validates the url
         state_dict = torch.hub.load_state_dict_from_url(pretrained_model, map_location='cpu')

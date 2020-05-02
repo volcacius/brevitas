@@ -101,7 +101,6 @@ class QuantImageNetClassification(LightningModule):
         self.ema = models_dict[arch](self.hparams)
         self.ema.eval()
         self.ema_first_batch = True
-        self.ema_first_epoch = True
         for p in self.ema.parameters():
             p.requires_grad_(False)
         for name, mod in self.ema.named_modules():
@@ -150,9 +149,9 @@ class QuantImageNetClassification(LightningModule):
         except KeyError:
             return
         if pretrained_model is not None:
-            self.model.load_state_dict(
-                state_dict_from_url_or_path(pretrained_model, load_ema=self.hparams.LOAD_EMA),
-                strict=self.hparams.STRICT)
+            state_dict = state_dict_from_url_or_path(pretrained_model, load_from_ema=self.hparams.LOAD_FROM_EMA)
+            self.model.load_state_dict(state_dict, strict=self.hparams.STRICT)
+            self.ema.load_state_dict(state_dict, strict=self.hparams.STRICT)
             logging.info('Loaded pretrained model at: {}'.format(pretrained_model))
 
     def on_save_checkpoint(self, checkpoint):
@@ -247,8 +246,10 @@ class QuantImageNetClassification(LightningModule):
                     quant_weight_buffer = ema_state_dict[k]
                     weight_k = k[:-len(k_suffix)] + 'weight'
                     ema_state_dict[weight_k].copy_(quant_weight_buffer.detach())
+            # Reload ema weights into model if enabled
             if self.hparams.RELOAD_EMA_EPOCH:
-                self.model.load_state_dict(ema_state_dict)
+                self.model.load_state_dict(ema_state_dict, strict=True)
+                self.model.to('cuda' if self.on_gpu else 'cpu')
 
     def on_epoch_start(self):
         # Reset loggers
@@ -261,11 +262,8 @@ class QuantImageNetClassification(LightningModule):
         self.val_loss_ema_meter.reset()
         self.val_top1_ema_meter.reset()
         self.val_top5_ema_meter.reset()
-        # Reload ema weights into model if enabled, after the first epoch
-        if self.ema_first_epoch:
-            self.ema_first_epoch = False
-        else:
-            self.update_ema_epoch()
+        # load ema buffers into ema weights
+        self.update_ema_epoch()
 
 
     def validation_step(self, batch, batch_idx):
