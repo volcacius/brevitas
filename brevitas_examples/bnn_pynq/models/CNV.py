@@ -69,8 +69,8 @@ class CNV(Module):
                                                        bit_width=weight_bit_width,
                                                        quant_type=weight_quant_type))
             in_ch = out_ch
-            self.conv_features.append(BatchNorm2d(in_ch, eps=1e-4, affine=False))
             self.conv_features.append(BatchTop10AveNorm2d(features=in_ch))
+            self.conv_features.append(BatchNorm2d(in_ch, eps=1e-4))
             self.conv_features.append(get_act_quant(act_bit_width, act_quant_type))
             if is_pool_enabled:
                 self.conv_features.append(MaxPool2d(kernel_size=2))
