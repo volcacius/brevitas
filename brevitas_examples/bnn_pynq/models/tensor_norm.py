@@ -65,6 +65,7 @@ class BatchTop10AveNorm2d(torch.jit.ScriptModule):
         super(BatchTop10AveNorm2d, self).__init__()
         self.momentum = momentum
         self.weight = nn.Parameter(torch.empty((1, features, 1, 1)).fill_(1.0))
+        self.bias = nn.Parameter(torch.empty((1, features, 1, 1)).fill_(0.0))
         self.register_buffer('running_top10_ave', torch.empty((1, features, 1, 1)).fill_(0.0))
         self.first = True
 
@@ -80,9 +81,9 @@ class BatchTop10AveNorm2d(torch.jit.ScriptModule):
                 self.first = False
             else:
                 self.running_top10_ave = (1 - self.momentum) * self.running_top10_ave + self.momentum * (top10_ave.detach())
-            output = (input_ / top10_ave) * self.weight * self.running_top10_ave
+            output = (input_ / top10_ave) * self.weight + self.bias
         else:
-            output = input_ * self.weight
+            output = (input_ / self.running_top10_ave) * self.weight + self.bias
         return output
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
