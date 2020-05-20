@@ -22,7 +22,7 @@
 
 import torch
 from torch.nn import Module, ModuleList, BatchNorm2d, MaxPool2d, BatchNorm1d
-from .tensor_norm import TensorNorm
+from .tensor_norm import TensorNorm, BatchTop10AveNorm2d
 from .common import get_quant_conv2d, get_quant_linear, get_act_quant, get_quant_type
 from brevitas.nn import QuantConv2d, QuantHardTanh, QuantLinear
 
@@ -69,6 +69,7 @@ class CNV(Module):
                                                        bit_width=weight_bit_width,
                                                        quant_type=weight_quant_type))
             in_ch = out_ch
+            self.conv_features.append(BatchTop10AveNorm2d(features=in_ch))
             self.conv_features.append(BatchNorm2d(in_ch, eps=1e-4))
             self.conv_features.append(get_act_quant(act_bit_width, act_quant_type))
             if is_pool_enabled:
