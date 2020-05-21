@@ -32,7 +32,7 @@ from brevitas.quant_tensor import *
 
 from brevitas_examples.imagenet_classification.models.common import *
 
-ACT_SCALING_MIN_VAL = 1e-8
+SCALING_MIN_VAL = 1e-8
 
 
 class DwsConvBlock(Module):
@@ -87,6 +87,7 @@ class ConvBlock(Module):
                                       padding=padding,
                                       groups=groups,
                                       bias=False,
+                                      weight_scaling_min_val=SCALING_MIN_VAL,
                                       weight_scaling_stats_op=get_stats_op(weight_bit_width),
                                       weight_quant_type=get_quant_type(weight_bit_width),
                                       bit_width=weight_bit_width)
@@ -96,7 +97,7 @@ class ConvBlock(Module):
                                                scaling_per_channel=activation_scaling_per_channel,
                                                quant_type=get_quant_type(act_bit_width),
                                                scaling_impl_type=ScalingImplType.STATS,
-                                               scaling_min_val=ACT_SCALING_MIN_VAL,
+                                               scaling_min_val=SCALING_MIN_VAL,
                                                threshold=1.0,
                                                return_quant_tensor=True)
 
@@ -148,12 +149,13 @@ class MBN(Module):
                                               quant_type=get_quant_type(act_bit_width),
                                               threshold=1.0,
                                               scaling_impl_type=ScalingImplType.STATS,
-                                              scaling_min_val=ACT_SCALING_MIN_VAL,
+                                              scaling_min_val=SCALING_MIN_VAL,
                                               return_quant_tensor=False)
         self.output = make_quant_linear(in_channels, num_classes,
                                         bias=False,
                                         bit_width=weight_bit_width,
                                         weight_quant_type=get_quant_type(weight_bit_width),
+                                        weight_scaling_min_val=SCALING_MIN_VAL,
                                         weight_scaling_per_output_channel=False)
         self.tensor_norm = TensorNorm()
 
