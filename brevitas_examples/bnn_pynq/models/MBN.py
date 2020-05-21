@@ -159,7 +159,6 @@ class MBN(Module):
                                         weight_scaling_min_val=SCALING_MIN_VAL,
                                         weight_scaling_impl_type=ScalingImplType.PARAMETER_FROM_STATS,
                                         weight_scaling_per_output_channel=False)
-        self.tensor_norm = TensorNorm()
 
     def clip_weights(self, min_val, max_val):
         pass
@@ -171,7 +170,6 @@ class MBN(Module):
         x = self.final_act(x)
         x = x.view(x.size(0), -1)
         out = self.output(x)
-        out = self.tensor_norm(out)
         return out
 
 
