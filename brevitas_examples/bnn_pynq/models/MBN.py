@@ -169,7 +169,7 @@ class MBN(Module):
         x = self.final_act(x)
         x = x.view(x.size(0), -1)
         out = self.output(x)
-        out = self.tensor_norm(x)
+        out = self.tensor_norm(out)
         return out
 
 
