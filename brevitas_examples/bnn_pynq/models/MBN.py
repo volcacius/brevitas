@@ -32,7 +32,7 @@ from brevitas.quant_tensor import *
 
 from brevitas_examples.imagenet_classification.models.common import *
 
-SCALING_MIN_VAL = 1e-8
+SCALING_MIN_VAL = 1e-22
 
 
 class DwsConvBlock(Module):
@@ -88,7 +88,6 @@ class ConvBlock(Module):
                                       groups=groups,
                                       bias=False,
                                       weight_scaling_min_val=SCALING_MIN_VAL,
-                                      weight_scaling_impl_type=ScalingImplType.PARAMETER_FROM_STATS,
                                       weight_scaling_stats_op=get_stats_op(weight_bit_width),
                                       weight_quant_type=get_quant_type(weight_bit_width),
                                       bit_width=weight_bit_width)
@@ -157,8 +156,8 @@ class MBN(Module):
                                         bit_width=weight_bit_width,
                                         weight_quant_type=get_quant_type(weight_bit_width),
                                         weight_scaling_min_val=SCALING_MIN_VAL,
-                                        weight_scaling_impl_type=ScalingImplType.PARAMETER_FROM_STATS,
                                         weight_scaling_per_output_channel=False)
+        self.tensor_norm = TensorNorm()
 
     def clip_weights(self, min_val, max_val):
         pass
@@ -170,6 +169,7 @@ class MBN(Module):
         x = self.final_act(x)
         x = x.view(x.size(0), -1)
         out = self.output(x)
+        out = self.tensor_norm(x)
         return out
 
 
