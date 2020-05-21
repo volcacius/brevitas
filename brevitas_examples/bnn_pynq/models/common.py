@@ -24,6 +24,7 @@ from brevitas.core.bit_width import BitWidthImplType
 from brevitas.core.quant import QuantType
 from brevitas.core.restrict_val import RestrictValueType
 from brevitas.core.scaling import ScalingImplType
+from brevitas.core.stats import StatsOp
 from brevitas.nn import QuantConv2d, QuantHardTanh, QuantLinear
 
 # Quant common
@@ -54,6 +55,12 @@ def get_quant_type(bit_width):
         return QuantType.BINARY
     else:
         return QuantType.INT
+
+def get_stats_op(bit_width):
+    if bit_width == 1:
+        return StatsOp.AVE
+    else:
+        return StatsOp.MAX
 
 
 def get_act_quant(act_bit_width, act_quant_type):  

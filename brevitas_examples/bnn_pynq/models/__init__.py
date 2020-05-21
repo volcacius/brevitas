@@ -35,12 +35,14 @@ from .CNV import cnv
 from .LFC import lfc
 from .TFC import tfc
 from .SFC import sfc
+from .MBN import mbn
 
 model_impl = {
     'CNV': cnv,
     'LFC': lfc,
     'TFC': tfc,
-    'SFC': sfc
+    'SFC': sfc,
+    'MBN': mbn,
 }
 
 def get_model_cfg(name):
