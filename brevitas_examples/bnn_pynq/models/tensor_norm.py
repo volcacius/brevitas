@@ -54,3 +54,25 @@ class TensorNorm(nn.Module):
             return (x - mean) * inv_std * self.weight + self.bias
         else:
             return ((x - self.running_mean) / (self.running_var + self.eps).pow(0.5)) * self.weight + self.bias
+
+class BatchTop10AveNorm2d(torch.jit.ScriptModule):
+    __constants__ = ['momentum']
+
+    def __init__(self, features, momentum=0.1):
+        super(BatchTop10AveNorm2d, self).__init__()
+        self.momentum = momentum
+        self.weight = nn.Parameter(torch.empty((1, features, 1, 1)).fill_(1.0))
+        self.register_buffer('running_top10_ave', torch.empty((1, features, 1, 1)).fill_(1.0))
+
+    @torch.jit.script_method
+    def forward(self, input_):
+        batchsize, channels, height, width = input_.size()
+        permuted_input_ = input_.permute(1, 0, 2, 3).contiguous().view(channels, -1).contiguous()
+        if self.training:
+            top10 = torch.topk(permuted_input_.abs(), k=10, dim=1, sorted=False, largest=True)[0]
+            top10_ave = top10.mean(dim=1).view(1, -1, 1, 1)
+            self.running_top10_ave = (1 - self.momentum) * self.running_top10_ave + self.momentum * (top10_ave.detach())
+            output = (input_ / top10_ave) * self.weight
+        else:
+            output = (input_ / self.running_top10_ave) * self.weight
+        return output

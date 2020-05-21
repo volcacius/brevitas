@@ -26,7 +26,7 @@ SOFTWARE.
 """
 
 from torch.nn import Module, BatchNorm2d, AvgPool2d, Sequential
-from .tensor_norm import TensorNorm
+from .tensor_norm import TensorNorm, BatchTop10AveNorm2d
 from .common import get_quant_type, get_stats_op
 from brevitas.quant_tensor import *
 
@@ -88,6 +88,7 @@ class ConvBlock(Module):
                                       weight_scaling_stats_op=get_stats_op(weight_bit_width),
                                       weight_quant_type=get_quant_type(weight_bit_width),
                                       bit_width=weight_bit_width)
+        self.top10ave = BatchTop10AveNorm2d(features=out_channels)
         self.bn = BatchNorm2d(num_features=out_channels, eps=bn_eps)
         self.activation = make_quant_hard_tanh(bit_width=act_bit_width,
                                                per_channel_broadcastable_shape=(1, out_channels, 1, 1),
@@ -98,6 +99,7 @@ class ConvBlock(Module):
 
     def forward(self, x):
         x = self.conv(x)
+        x = self.top10ave(x)
         x = self.bn(x)
         x = self.activation(x)
         return x
