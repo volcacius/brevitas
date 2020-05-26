@@ -23,6 +23,7 @@ DATASET_TRAIN_SIZE: 1281167
 
 WARMUP_EPOCHS: 0
 
+NO_TRAIN:
 NO_WD:
   - 'bn'
   - 'bias'

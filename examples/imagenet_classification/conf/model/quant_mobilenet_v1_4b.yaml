@@ -1,7 +1,3 @@
-NO_TRAIN:
-  - 'init_block'
-  - 'stage1.unit1'
-
 model:
   ARCH: quant_mobilenet_v1
   WIDTH_SCALE: 1.0
