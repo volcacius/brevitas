@@ -34,7 +34,8 @@ class AverageMeter(object):
 def filter_keys(dict_to_filter, filters, return_dict=False):
     include_dict = {}
     exclude_dict = {}
-    for n, v in dict_to_filter:
+    d = dict_to_filter.items() if isinstance(dict_to_filter, dict) else dict_to_filter
+    for n, v in d:
         include = filters is not None and any([f in n for f in filters])
         if include:
             include_dict[n] = v
@@ -44,6 +45,7 @@ def filter_keys(dict_to_filter, filters, return_dict=False):
         return include_dict, exclude_dict
     else:
         return include_dict.values(), exclude_dict.values()
+
 
 def lowercase_keys(d):
     return {k.lower(): v for k, v in d.items()}

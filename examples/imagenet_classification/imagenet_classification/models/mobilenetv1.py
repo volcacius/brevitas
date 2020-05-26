@@ -42,7 +42,8 @@ class DwsConvBlock(nn.Module):
                  out_channels,
                  merge_bn,
                  stride,
-                 weight_bit_width,
+                 dw_weight_bit_width,
+                 pw_weight_bit_width,
                  activation_bit_width,
                  weight_scaling_per_output_channel,
                  pw_activation_scaling_per_channel=False):
@@ -55,7 +56,7 @@ class DwsConvBlock(nn.Module):
             kernel_size=3,
             padding=1,
             stride=stride,
-            weight_bit_width=weight_bit_width,
+            weight_bit_width=dw_weight_bit_width,
             activation_bit_width=activation_bit_width,
             weight_scaling_per_output_channel=weight_scaling_per_output_channel)
         self.pw_conv = ConvBlock(
@@ -64,7 +65,7 @@ class DwsConvBlock(nn.Module):
             merge_bn=merge_bn,
             kernel_size=1,
             padding=0,
-            weight_bit_width=weight_bit_width,
+            weight_bit_width=pw_weight_bit_width,
             activation_bit_width=activation_bit_width,
             weight_scaling_per_output_channel=weight_scaling_per_output_channel,
             activation_scaling_per_channel=pw_activation_scaling_per_channel)
@@ -130,6 +131,7 @@ class MobileNet(nn.Module):
                  first_stage_stride,
                  weight_scaling_per_channel,
                  activation_scaling_per_channel,
+                 other_pw_weight_bit_width,
                  weight_bit_width,
                  activation_bit_width,
                  last_layer_weight_bit_width,
@@ -162,11 +164,16 @@ class MobileNet(nn.Module):
             pw_activation_scaling_per_channel = i < len(channels[1:]) - 1 and activation_scaling_per_channel
             for j, out_channels in enumerate(channels_per_stage):
                 stride = 2 if (j == 0) and ((i != 0) or first_stage_stride) else 1
+                if (i == 3 and (j == 1 or j == 5)) or (i == 4 and (j == 0 or j == 1)):
+                    pwwbw = other_pw_weight_bit_width
+                else:
+                    pwwbw = weight_bit_width
                 mod = DwsConvBlock(
                     in_channels=in_channels,
                     out_channels=out_channels,
                     stride=stride,
-                    weight_bit_width=weight_bit_width,
+                    dw_weight_bit_width=weight_bit_width,
+                    pw_weight_bit_width=pwwbw,
                     activation_bit_width=activation_bit_width,
                     weight_scaling_per_output_channel=weight_scaling_per_channel,
                     pw_activation_scaling_per_channel=pw_activation_scaling_per_channel,
@@ -214,6 +221,7 @@ def quant_mobilenet_v1(hparams):
         weight_scaling_per_channel=hparams.model.WEIGHT_SCALING_PER_CHANNEL,
         activation_scaling_per_channel=hparams.model.ACTIVATION_SCALING_PER_CHANNEL,
         weight_bit_width=hparams.model.WEIGHT_BIT_WIDTH,
+        other_pw_weight_bit_width=hparams.model.OTHER_PW_WEIGHT_BIT_WIDTH,
         activation_bit_width=hparams.model.ACTIVATION_BIT_WIDTH,
         avg_pool_bit_width=hparams.model.AVG_POOL_BIT_WIDTH,
         last_layer_weight_bit_width=hparams.model.LAST_LAYER_WEIGHT_BIT_WIDTH,

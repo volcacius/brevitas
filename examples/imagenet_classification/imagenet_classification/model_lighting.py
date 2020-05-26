@@ -91,7 +91,11 @@ class QuantImageNetClassification(LightningModule):
         self.model = models_dict[arch](self.hparams)
 
     def configure_optimizers(self):
-        no_wd_params, wd_params = filter_keys(self.named_parameters(), self.hparams.NO_WD)
+        if hasattr(self.hparams, 'NO_TRAIN'):
+            _, train = filter_keys(self.named_parameters(), self.hparams.NO_TRAIN, return_dict=True)
+        else:
+            train = self.named_parameters()
+        no_wd_params, wd_params = filter_keys(train, self.hparams.NO_WD)
         optim_dict = [
             {'params': no_wd_params, 'weight_decay': 0.0},
             {'params': wd_params, 'weight_decay': self.hparams.optim_conf.WEIGHT_DECAY}]
