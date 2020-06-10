@@ -44,12 +44,14 @@ EXPORT = True
 NUM_LAYERS = 28
 STOP_PRUNING = 'layer0_block0_pw'
 
+
 class DwsConvBlock(nn.Module):
     def __init__(self,
                  in_channels,
                  out_channels,
                  stride,
                  bit_width,
+                 pw_weight_bit_width,
                  pw_activation_scaling_per_channel=False):
         super(DwsConvBlock, self).__init__()
         self.dw_conv = ConvBlock(in_channels=in_channels,
@@ -64,7 +66,7 @@ class DwsConvBlock(nn.Module):
                                  out_channels=out_channels,
                                  kernel_size=1,
                                  padding=0,
-                                 weight_bit_width=bit_width,
+                                 weight_bit_width=pw_weight_bit_width,
                                  act_bit_width=bit_width,
                                  activation_scaling_per_channel=pw_activation_scaling_per_channel)
 
@@ -235,6 +237,7 @@ class MobileNet(nn.Module):
                  channels,
                  first_stage_stride,
                  bit_width,
+                 other_pw_weight_bit_width,
                  simd_list,
                  pe_list,
                  in_channels=3,
@@ -260,10 +263,15 @@ class MobileNet(nn.Module):
             pw_activation_scaling_per_channel = i < len(channels[1:]) - 1
             for j, out_channels in enumerate(channels_per_stage):
                 stride = 2 if (j == 0) and ((i != 0) or first_stage_stride) else 1
+                if (i == 3 and (j == 1 or j == 5)) or (i == 4 and (j == 0 or j == 1)):
+                    pwwbw = other_pw_weight_bit_width
+                else:
+                    pwwbw = bit_width
                 mod = DwsConvBlock(in_channels=in_channels,
                                    out_channels=out_channels,
                                    stride=stride,
                                    bit_width=bit_width,
+                                   pw_weight_bit_width=pwwbw,
                                    pw_activation_scaling_per_channel=pw_activation_scaling_per_channel)
                 stage.add_module('unit{}'.format(j + 1), mod)
                 in_channels = out_channels
@@ -400,6 +408,7 @@ def quant_mobilenet_v1(cfg):
     mean = [float(cfg.get('PREPROCESS', 'MEAN_0')), float(cfg.get('PREPROCESS', 'MEAN_1')),
             float(cfg.get('PREPROCESS', 'MEAN_2'))]
     std = float(cfg.get('PREPROCESS', 'STD_0'))
+    other_pw_weight_bit_width = cfg.getint('QUANT', 'OTHER_PW_WEIGHT_BIT_WIDTH')
     try:
         simd_list = list(map(int, cfg.get('EXPORT', 'SIMD').split(',')))
         pe_list = list(map(int, cfg.get('EXPORT', 'PE').split(',')))
@@ -414,5 +423,6 @@ def quant_mobilenet_v1(cfg):
                     mean=mean,
                     std=std,
                     simd_list=simd_list,
-                    pe_list=pe_list)
+                    pe_list=pe_list,
+                    other_pw_weight_bit_width=other_pw_weight_bit_width)
     return net
