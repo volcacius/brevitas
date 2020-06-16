@@ -38,17 +38,94 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from abc import ABCMeta, abstractmethod
-from brevitas.quant_tensor import QuantTensor
+from abc import ABCMeta
+from typing import Tuple, Optional, Union, List
+from dataclasses import dataclass, field
 
+from brevitas.quant_tensor import QuantTensor
+from brevitas.proxy.parameter_quant import WeightQuantProxy
 
 SCALING_MIN_VAL = 2.0 ** (-16)
+
+
+@dataclass
+class ScalingShapeConfig:
+    stats_input_view_shape_impl: StatsInputViewShapeImpl
+    stats_input_concat_dim: int
+    stats_reduce_dim: Optional[int]
+    shape: Tuple[int, ...]
+
+
+@dataclass
+class QuantConfig(metaclass=ABCMeta):
+    quant_type: QuantType
+    narrow_range: bool
+    signed: bool
+
+
+@dataclass
+class ScalingConfig(metaclass=ABCMeta):
+    restrict_value_type: Optional[RestrictValueType]
+    impl_type: ScalingImplType
+    min_val: Optional[float]
+    stats_op: Optional[StatsOp]
+    const: Optional[float]
+    per_channel: bool
+    stats_sigma: float
+
+
+@dataclass
+class BitWidthConfig(metaclass=ABCMeta):
+    bit_width: Optional[int]
+    impl_type: Optional[BitWidthImplType]
+    restrict_value_type: Optional[RestrictValueType]
+    min_val: Optional[int]
+    max_val: Optional[int]
+    override_pretrained: bool
+
+
+@dataclass
+class WeightScalingConfig(ScalingConfig):
+    impl_type = ScalingImplType.STATS
+    min_val = None
+    stats_op = StatsOp.MAX
+    const = None
+    per_channel = True
+    stats_sigma = 3.0
+
+
+@dataclass
+class WeightBitWidthConfig(BitWidthConfig):
+    impl_type = BitWidthImplType.CONST
+    restrict_value_type = RestrictValueType.INT
+    min_val = 2
+    max_val = None
+    override_pretrained = False
+
+
+@dataclass
+class WeightQuantConfig(QuantConfig):
+    scaling_config: WeightScalingConfig
+    bit_width_config: WeightBitWidthConfig
+    narrow_range = False
+    signed: bool = field(init=False, default=True)
+    ternary_threshold = 0.5
+
+
+@dataclass
+class BiasQuantConfig(QuantConfig):
+    narrow_range = False
+    signed: bool = field(init=False, default=True)
 
 
 class QuantLayer(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, compute_output_scale, compute_output_bit_width, return_quant_tensor):
+    def __init__(
+            self,
+            compute_output_scale,
+            compute_output_bit_width,
+            return_quant_tensor):
         self.compute_output_scale = compute_output_scale
         self.compute_output_bit_width = compute_output_bit_width
         self.return_quant_tensor = return_quant_tensor
@@ -67,3 +144,28 @@ class QuantLayer(object):
             return QuantTensor(tensor=output, scale=output_scale, bit_width=output_bit_width)
         else:
             return output
+
+
+class WeightQuantLayer(QuantLayer):
+    __metaclass__ = ABCMeta
+
+    def __init__(
+            self,
+            weight,
+            weight_quant_config,
+            compute_output_scale,
+            compute_output_bit_width,
+            return_quant_tensor):
+        super(WeightQuantLayer, self).__init__(
+            compute_output_scale,
+            compute_output_bit_width,
+            return_quant_tensor)
+        self.weight_quant = WeightQuantProxy(
+            tracked_parameter_list_init=weight,
+            quant_config=weight_quant_config)
+
+
+
+
+
+
