@@ -186,7 +186,7 @@ class ConvBlock(nn.Module):
                 preproc_bias_input = - inp.scale * torch.tensor(self.mean, device=x.tensor.device).view(1, -1, 1, 1)
                 preproc_bias_input_shape = (inp.tensor.shape[0], inp.tensor.shape[1], *self.conv.kernel_size)
                 preproc_bias_input_expanded = preproc_bias_input.expand(preproc_bias_input_shape)
-                preproc_bias = self.conv(pack_quant_tensor(preproc_bias_input_expanded, 0.0, 0)).tensor
+                preproc_bias = self.conv(pack_quant_tensor(preproc_bias_input_expanded, torch.tensor(0.0), torch.tensor(0.0))).tensor
                 self.preprocessing_bias = preproc_bias
                 int_input = (inp.tensor - preproc_bias_input.expand_as(inp.tensor)) * 255.0 / inp.scale
                 int_acc = bn_sign * (acc.tensor - preproc_bias.expand_as(acc.tensor)) * 255.0 / acc.scale
