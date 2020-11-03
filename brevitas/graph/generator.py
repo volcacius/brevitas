@@ -72,7 +72,10 @@ class ModuleGenerator(object):
     def _add_module(self, module: Module, module_name, prefix_list, model: Module):
         supermodule = model
         for prefix in prefix_list:
-            submodule_names, submodules = zip(*list(supermodule.named_modules()))
+            if supermodule._modules:
+                submodule_names, _ = zip(*list(supermodule._modules.items()))
+            else:
+                submodule_names = []
             if prefix in submodule_names:
                 supermodule = supermodule._modules[prefix]
             else:

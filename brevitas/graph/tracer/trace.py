@@ -1,7 +1,7 @@
 from typing import List, Any, Dict, Callable, Tuple, Union, Optional
 from dataclasses import dataclass, field
 
-from torch import Tensor
+from torch import Tensor, Size
 from torch.nn import Module, Parameter
 
 from ..module import Index, FnType
@@ -87,7 +87,7 @@ class Trace:
 
     def index_from_val(self, value: Any, recurse=True):
         index = self.index_from_map(value)
-        if isinstance(value, tuple) and recurse and index is None:
+        if isinstance(value, tuple) and not isinstance(value, Size) and recurse and index is None:
             return tuple(self.index_from_val(v, True) for v in value)
         elif isinstance(value, list) and recurse and index is None:
             return [self.index_from_val(v, True) for v in value]

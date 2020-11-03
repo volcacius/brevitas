@@ -3,15 +3,15 @@ from _collections_abc import Iterable
 from inspect import getcallargs
 from typing import List, Union, Any
 from copy import copy
-import functools
 from packaging import version
-from dataclasses import field, dataclass, replace
+
 
 import torch
 from torch import Tensor
 from torch.nn import Module, Sequential, ModuleList, ModuleDict
 
 from brevitas.quant_tensor import QuantTensor
+from .base import TracerBase
 from .trace import Trace, TraceElem
 from .wrapper.scriptmodule import torchscript_wrapper
 from .wrapper.builtin import IntWrapper, StrWrapper, FloatWrapper
@@ -54,49 +54,12 @@ class CallableWrapper(object):
     def __call__(self, *args, **kwargs):
         args, kwargs = self.tracer.repack_args_kwargs(args, kwargs)
         out = self.callabl(*args, **kwargs)
-        kwargs['self'] = self.tracer.value_  # add tensor to kwargs
+        kwargs['self'] = self.tracer.value_
         out = self.tracer.update_trace(self.callabl.__name__, FnType.METHOD, args, kwargs, out)
         return self.tracer.epilogue(self.inplace, out)
 
 
-# Adapted from: https://bit.ly/3hYCpvJ (stackoverflow)
-class TracerMeta(type):
-
-    # Adapted from: https://code.activestate.com/recipes/496741-object-proxying/
-    magic_methods = [
-        '__abs__', '__add__', '__and__', '__call__', '__cmp__', '__coerce__', '__contains__',
-        '__delitem__', '__delslice__', '__div__', '__divmod__', '__eq__', '__float__',
-        '__floordiv__', '__ge__', '__getitem__', '__getslice__', '__gt__', '__hash__',
-        '__hex__', '__iadd__', '__iand__', '__idiv__', '__idivmod__', '__ifloordiv__',
-        '__ilshift__', '__imod__', '__imul__', '__int__', '__invert__', '__ior__', '__ipow__',
-        '__irshift__', '__isub__', '__itruediv__', '__ixor__', '__le__', '__len__',
-        '__long__', '__lshift__', '__lt__', '__mod__', '__mul__', '__ne__', '__neg__', '__oct__',
-        '__or__', '__pos__', '__pow__', '__radd__', '__rand__', '__rdiv__', '__rdivmod__',
-        '__reduce__', '__reduce_ex__', '__reversed__', '__rfloorfiv__',  '__rlshift__', '__rmod__',
-        '__rmul__', '__ror__', '__rpow__', '__rrshift__', '__rshift__', '__rsub__', '__rtruediv__',
-        '__rxor__', '__setitem__', '__setslice__', '__sub__', '__truediv__', '__xor__',
-        '__next__', '__iter__']
-
-    @staticmethod
-    def _magic_function(tracer, method_name, *args, **kwargs):
-        if hasattr(tracer.value_, method_name) and method_name in TracerMeta.magic_methods:
-            fn = getattr(tracer.value_, method_name)
-            args, kwargs = tracer.repack_args_kwargs(args, kwargs)
-            out = fn(*args, **kwargs)
-            kwargs['self'] = tracer.value_
-            out, inplace = tracer.update_inplace_output(out, args, kwargs)
-            out = tracer.update_trace(method_name, FnType.METHOD, args, kwargs, out)
-            return tracer.epilogue(inplace, out)
-
-    def __new__(cls, name, bases, attr):
-        new = super(TracerMeta, cls).__new__(cls, name, bases, attr)
-        for method_name in TracerMeta.magic_methods:
-            magic_method = functools.partialmethod(TracerMeta._magic_function, method_name)
-            setattr(new, method_name, magic_method)
-        return new
-
-
-class Tracer(metaclass=TracerMeta):
+class Tracer(TracerBase):
 
     def __init__(self, value_, trace_ = None, namespace_= None):
         self.value_ = value_
@@ -119,6 +82,16 @@ class Tracer(metaclass=TracerMeta):
             self.update_trace(name, FnType.ATTRIBUTE, [], kwargs, attr)
             return self.epilogue(False, attr)
 
+    def is_inplace_function(self, out, fn_args, fn_kwargs):
+        return any([out is arg for arg in fn_args + list(fn_kwargs.values())])
+
+    # TODO merge with tensor function
+    def _trace_oop_function(self, function, args, kwargs):
+        args, kwargs = self.repack_args_kwargs(args, kwargs)
+        out = function(*args, **kwargs)
+        out = self.update_trace(function, FnType.FUNCTION, args, kwargs, out)
+        return self.epilogue(False, out)
+
     def trace_module_through(self, module):
         return (isinstance(module, tuple(self.preserve_module_blocklist))
                 or all([not module_class_name(module).startswith(pma)
@@ -127,17 +100,18 @@ class Tracer(metaclass=TracerMeta):
     def is_tracing(self, input_list):
         return any(isinstance(i, Tracer) for i in flatten(input_list))
 
-    def repack_value(self, value):
-        if self.trace_.index_from_map(value) is None:
+    def repack_value(self, value, check_already_in_map=True):
+        value_from_map = self.trace_.index_from_map(value)
+        if not check_already_in_map or value_from_map is None:
             if isinstance(value, Tracer):
                 return value.value_
-            elif type(value) is int:
+            elif isinstance(value, int) and not isinstance(value, bool):
                 return IntWrapper(value)
-            elif type(value) is float:
+            elif isinstance(value, float):
                 return FloatWrapper(value)
-            elif type(value) is str:
+            elif isinstance(value, str):
                 return StrWrapper(value)
-            elif isinstance(value, tuple) and not isinstance(value, QuantTensor):
+            elif isinstance(value, tuple) and not isinstance(value, QuantTensor) and not isinstance(value, torch.Size):
                 return tuple(self.repack_value(v) for v in value)
             elif isinstance(value, list):
                 return [self.repack_value(v) for v in value]
@@ -186,7 +160,7 @@ class Tracer(metaclass=TracerMeta):
                 name = ''
             else:
                 supermodule = self.namespace_[-1][0]
-                for name, mod in supermodule.named_modules():
+                for name, mod in supermodule._modules.items():
                     # identify current module as a submodule
                     if mod is module:
                         break
@@ -223,7 +197,8 @@ class Tracer(metaclass=TracerMeta):
             if self.is_tracing(orig_input) and not self.trace_module_through(module):
                 args = namespace[2]
                 module_name = namespace[1]
-                output, inplace = self.update_inplace_output(output, args, {})
+                inplace = self.is_inplace_function(output, args, {})
+                output = self.update_inplace_output(inplace, output)
                 output = self.update_trace(module, FnType.MODULE, tuple(args), {}, output)
                 self.trace_.trace_elem_list[-1].module_fn_name = module_name
                 if inplace:
@@ -253,10 +228,13 @@ class Tracer(metaclass=TracerMeta):
         fn_kwargs = getcallargs(fn_stub, *fn_args, **fn_kwargs)
         return [], fn_kwargs
 
-    def update_inplace_output(self, out, fn_args, fn_kwargs):
-        inplace = any([out is arg for arg in fn_args + list(fn_kwargs.values())])
-        out = out.clone() if inplace and isinstance(out, Tensor) else out
-        return out, inplace
+    def update_inplace_output(self, inplace, out):
+        if inplace and isinstance(out, Tensor):
+            return out.clone()
+        elif inplace:
+            raise RuntimeError(f"Inplace function on type {type(out)} not supported")
+        else:
+            return out
 
     def __torch_function__(self, fn, types, args=(), kwargs=None):
         kwargs = {} if kwargs is None else kwargs
@@ -265,7 +243,8 @@ class Tracer(metaclass=TracerMeta):
         # get rid of out=None early on since it's often problematic
         if 'out' in kwargs and kwargs['out'] is None: del kwargs['out']
         out = fn(*args, **kwargs)
-        out, inplace = self.update_inplace_output(out, args, kwargs)
+        inplace = self.is_inplace_function(out, args, kwargs)
+        out = self.update_inplace_output(inplace, out)
         out = self.update_trace(fn, FnType.FUNCTION, args, kwargs, out)
         return self.epilogue(inplace, out)
 
@@ -279,7 +258,7 @@ class Tracer(metaclass=TracerMeta):
         # empty fn_args means it would be an empty tuple, which we don't want
         fn_args = [] if fn_args == () else fn_args
         # repack fn_out
-        fn_out = self.repack_value(fn_out)
+        fn_out = self.repack_value(fn_out, check_already_in_map=False)
         # assign index to fn inputs and outputs
         fn_args_index = [self.trace_.index_from_val(a) for a in fn_args]
         fn_kwargs_index = {k: self.trace_.index_from_val(a) for k,a in fn_kwargs.items()}

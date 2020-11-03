@@ -1,5 +1,6 @@
 from unittest import mock
 import inspect
+from functools import partial
 
 import torch
 
@@ -8,6 +9,26 @@ from .backport.signatures import get_nn_functional_overrides
 from .backport.signatures import get_testing_overrides
 from .backport._overrides import torch_function_dispatch
 from .backport._overrides import _implement_torch_function
+from .math import math_builtins_functions, math_module_functions, math_function_wrapper
+
+
+def make_math_patches():
+
+    def make_wrapper(fn):
+        def wrapper(*args, **kwargs):
+            return math_function_wrapper(fn, args, kwargs)
+        return wrapper
+
+    def make_patch_set(prefix, function_set):
+        patches = []
+        for name, fn in function_set:
+            patch = mock.patch(prefix + name, wraps=make_wrapper(fn))
+            patches.append(patch)
+        return patches
+
+    math_patch_set = make_patch_set('builtins.', math_builtins_functions)
+    builtins_patch_set = make_patch_set('math.', math_module_functions)
+    return math_patch_set + builtins_patch_set
 
 
 def make_above_16_patches():
@@ -101,6 +122,6 @@ def make_below_16_patches():
     return torch_patches + func_patches
 
 
-ABOVE_16_PATCHES = make_above_16_patches()
-EQUAL_16_PATCHES = make_equal_16_patches()
-BELOW_16_PATCHES = make_equal_16_patches() + make_below_16_patches()
+ABOVE_16_PATCHES = make_above_16_patches() + make_math_patches()
+EQUAL_16_PATCHES = make_equal_16_patches() + make_math_patches()
+BELOW_16_PATCHES = make_equal_16_patches() + make_below_16_patches() + make_math_patches()
